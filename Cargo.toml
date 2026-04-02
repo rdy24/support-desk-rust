@@ -4,38 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Web framework
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-
-# Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-# Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "uuid"] }
-
-# Authentication
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono"] }
 jsonwebtoken = "9"
 argon2 = "0.5"
-password-hash = "0.5"
-
-# Validation
-validator = { version = "0.16", features = ["derive"] }
-
-# Date/Time
+validator = { version = "0.18", features = ["derive"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-
-# Utils
-anyhow = "1"
-thiserror = "1"
 dotenvy = "0.15"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-rand = "0.8"
-async-trait = "0.1"
+tower-http = { version = "0.6", features = ["cors"] }
 
-[dev-dependencies]
-tokio-test = "0.4"
+# Semua versi di atas adalah versi saat ebook ini ditulis, Maret 2026
+# Cek https://crates.io untuk versi terbaru
