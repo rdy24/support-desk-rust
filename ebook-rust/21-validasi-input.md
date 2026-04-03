@@ -10,7 +10,7 @@ Validasi input di aplikasi kita bekerja persis seperti itu. Data yang dikirim cl
 
 ## Kunci Jawaban Latihan Bab 20
 
-Berikut jawaban untuk semua latihan Bab 20:
+Berikut jawaban untuk latihan Bab 20:
 
 ### Latihan #1: Buat struct `TicketResponse`
 
@@ -30,26 +30,10 @@ pub struct TicketResponse {
 
 Lalu update `src/models/mod.rs` untuk export:
 ```rust
-pub use ticket::{CreateTicketDto, Ticket, TicketResponse};
+pub use ticket::{Ticket, TicketResponse};
 ```
 
-### Latihan #2: Buat `CreateTicketResponseDto`
-
-File: `src/models/ticket.rs` (tambahkan di akhir file)
-
-```rust
-#[derive(Debug, Deserialize)]
-pub struct CreateTicketResponseDto {
-    pub message: String,
-}
-```
-
-Lalu update `src/models/mod.rs`:
-```rust
-pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
-```
-
-### Latihan #3: Uji serialisasi manual
+### Latihan #2: Uji serialisasi manual
 
 Di `src/main.rs`, sebelum `#[tokio::main]`, tambahkan test function:
 
@@ -86,9 +70,7 @@ mod tests {
 
 Jalankan dengan: `cargo test test_user_serialization -- --nocapture`
 
-**Catatan:** Latihan #3 sudah dilakukan saat Bab 20, maka di Bab 21 test ini opsional untuk diperbaharui.
-
-### Latihan #4: Ubah `role` menjadi enum (OPTIONAL)
+### Latihan #2: Ubah `role` menjadi enum (OPTIONAL)
 
 Jika ingin dikerjakan, buat enum di `src/models/user.rs`:
 
@@ -122,7 +104,7 @@ pub struct User {
 
 ## State Sebelumnya
 
-Setelah menyelesaikan semua latihan Bab 20, folder struktur dan file kamu harus seperti ini:
+Setelah menyelesaikan Bab 20 (tanpa mengerjakan latihan opsional), folder struktur dan file kamu harus seperti ini:
 
 ```
 src/
@@ -175,32 +157,6 @@ pub struct Ticket {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTicketDto {
-    pub subject: String,
-    pub description: String,
-    pub category: String,
-    pub priority: String,
-}
-
-// Dari latihan #1
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct TicketResponse {
-    pub id: Uuid,
-    pub ticket_id: Uuid,
-    pub user_id: Uuid,
-    pub message: String,
-    pub created_at: DateTime<Utc>,
-}
-
-// Dari latihan #2
-#[derive(Debug, Deserialize)]
-pub struct CreateTicketResponseDto {
-    pub message: String,
-}
 ```
 
 **File: `src/models/api_response.rs`**
@@ -241,7 +197,7 @@ pub mod ticket;
 pub mod user;
 
 pub use api_response::ApiResponse;
-pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
+pub use ticket::Ticket;
 pub use user::User;
 ```
 
@@ -253,6 +209,8 @@ mod models;
 ```
 
 Verifikasi dengan: `cargo build` harus berhasil tanpa error
+
+⚠️ **Catatan:** Jika kamu mengerjakan latihan #1-2 Bab 20 (opsional), DTOs dan TicketResponse mungkin ada di models. Untuk Bab 21, kita akan membuat folder `src/dto/` terpisah dan pindahkan DTOs ke sana.
 
 ---
 

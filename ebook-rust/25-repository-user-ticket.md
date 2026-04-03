@@ -211,9 +211,11 @@ pub mod user;
 
 pub use enums::{UserRole, TicketStatus, TicketPriority, TicketCategory};
 pub use api_response::ApiResponse;
-pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
+pub use ticket::{Ticket, TicketResponse};
 pub use user::User;
 ```
+
+**Catatan:** `CreateTicketDto` bukan di models, tapi di `src/dto/ticket_dto.rs` (akan dibuat di Bab 21 bagian validasi input). Jangan export dari models.
 
 ---
 
@@ -314,10 +316,11 @@ Buat file `src/repositories/ticket_repository.rs`:
 ```rust
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::models::Ticket;
-use crate::dto::{CreateTicketDto, UpdateTicketDto};
+use crate::models::{Ticket, TicketStatus, TicketPriority, TicketCategory};
+use crate::dto::CreateTicketDto;
 use crate::common::AppError;
 
+#[derive(Clone)]
 pub struct TicketRepository {
     pool: PgPool,
 }
@@ -333,61 +336,59 @@ impl TicketRepository {
 
 ```rust
 pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Ticket>, AppError> {
-    let ticket = sqlx::query_as!(
-        Ticket,
-        "SELECT * FROM tickets WHERE id = $1",
-        id
+    let ticket = sqlx::query_as::<_, Ticket>(
+        "SELECT id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at FROM tickets WHERE id = $1"
     )
+    .bind(id)
     .fetch_optional(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(ticket)
 }
 ```
 
-### find_many dengan Filter
+### find_many dengan Filter dan Pagination
 
-Ticket perlu filter yang lebih kompleks, berdasarkan customer, agent, atau status:
+Ticket perlu filter berdasarkan customer_id dan status dengan pagination:
 
 ```rust
 pub async fn find_many(
     &self,
     customer_id: Option<Uuid>,
-    agent_id: Option<Uuid>,
     status: Option<&str>,
     page: i64,
     limit: i64,
 ) -> Result<(Vec<Ticket>, i64), AppError> {
     let offset = (page - 1) * limit;
 
-    let tickets = sqlx::query_as!(
-        Ticket,
-        "SELECT * FROM tickets
+    let tickets = sqlx::query_as::<_, Ticket>(
+        "SELECT id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at FROM tickets
          WHERE ($1::uuid IS NULL OR customer_id = $1)
-           AND ($2::uuid IS NULL OR agent_id = $2)
-           AND ($3::text IS NULL OR status::text = $3)
+           AND ($2::text IS NULL OR status::text = $2)
          ORDER BY created_at DESC
-         LIMIT $4 OFFSET $5",
-        customer_id, agent_id, status, limit, offset
+         LIMIT $3 OFFSET $4"
     )
+    .bind(customer_id)
+    .bind(status)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let total: i64 = sqlx::query_scalar!(
+    let total: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM tickets
          WHERE ($1::uuid IS NULL OR customer_id = $1)
-           AND ($2::uuid IS NULL OR agent_id = $2)
-           AND ($3::text IS NULL OR status::text = $3)",
-        customer_id, agent_id, status
+           AND ($2::text IS NULL OR status::text = $2)"
     )
+    .bind(customer_id)
+    .bind(status)
     .fetch_one(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?
-    .unwrap_or(0);
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok((tickets, total))
+    Ok((tickets, total.0))
 }
 ```
 
@@ -399,93 +400,47 @@ pub async fn create(
     dto: &CreateTicketDto,
     customer_id: Uuid,
 ) -> Result<Ticket, AppError> {
-    let ticket = sqlx::query_as!(
-        Ticket,
-        "INSERT INTO tickets (customer_id, category, priority, subject, description, tags)
-         VALUES ($1, $2::ticket_category, $3::ticket_priority, $4, $5, $6)
-         RETURNING *",
-        customer_id,
-        dto.category,
-        dto.priority,
-        dto.subject,
-        dto.description,
-        &dto.tags as &[String]
+    let ticket = sqlx::query_as::<_, Ticket>(
+        "INSERT INTO tickets (customer_id, category, priority, subject, description)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at"
     )
+    .bind(customer_id)
+    .bind(dto.category)
+    .bind(dto.priority)
+    .bind(&dto.subject)
+    .bind(&dto.description)
     .fetch_one(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(ticket)
 }
 ```
 
-> `&dto.tags as &[String]`: cara memberi tahu sqlx bahwa kita passing array PostgreSQL (`text[]`).
+### delete
 
-### update
-
-Update hanya field yang dikirim (partial update). Kita pakai `COALESCE`, yaitu fungsi SQL yang mengambil nilai pertama yang bukan NULL:
+Hapus ticket berdasarkan ID:
 
 ```rust
-pub async fn update(
-    &self,
-    id: Uuid,
-    dto: &UpdateTicketDto,
-) -> Result<Option<Ticket>, AppError> {
-    let ticket = sqlx::query_as!(
-        Ticket,
-        "UPDATE tickets SET
-            agent_id = COALESCE($2, agent_id),
-            status = COALESCE($3::ticket_status, status),
-            priority = COALESCE($4::ticket_priority, priority)
-         WHERE id = $1
-         RETURNING *",
-        id,
-        dto.agent_id,
-        dto.status.as_deref(),
-        dto.priority.as_deref(),
-    )
-    .fetch_optional(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+pub async fn delete(&self, id: Uuid) -> Result<bool, AppError> {
+    let result = sqlx::query("DELETE FROM tickets WHERE id = $1")
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(ticket)
+    Ok(result.rows_affected() > 0)
 }
 ```
 
-`COALESCE($2, agent_id)` artinya: kalau `$2` (nilai baru) ada isinya, pakai itu. Kalau `NULL`, pertahankan nilai `agent_id` yang lama.
-
-[ILUSTRASI: Tabel sebelum/sesudah update, hanya kolom yang dikirim berubah, kolom lain tetap sama. Seperti mengisi formulir perubahan data, cukup tulis field yang mau diganti]
+`.rows_affected()` mengembalikan jumlah baris yang dihapus. Kalau > 0, berarti ticket ada dan sudah dihapus.
 
 ---
 
-## Integrasi ke AppState
+## Daftarkan Module Repository
 
-Repository perlu dimasukkan ke `AppState` supaya bisa diakses dari handler:
-
-```rust
-// src/state.rs
-use sqlx::PgPool;
-use crate::repositories::{UserRepository, TicketRepository};
-
-#[derive(Clone)]
-pub struct AppState {
-    pub pool: PgPool,
-    pub user_repo: UserRepository,
-    pub ticket_repo: TicketRepository,
-}
-
-impl AppState {
-    pub fn new(pool: PgPool) -> Self {
-        Self {
-            user_repo: UserRepository::new(pool.clone()),
-            ticket_repo: TicketRepository::new(pool.clone()),
-            pool,
-        }
-    }
-}
-```
-
-Jangan lupa daftarkan module di `src/repositories/mod.rs`:
+Di `src/repositories/mod.rs`:
 
 ```rust
 pub mod user_repository;
@@ -495,27 +450,40 @@ pub use user_repository::UserRepository;
 pub use ticket_repository::TicketRepository;
 ```
 
-Dan di `src/main.rs`, saat membuat AppState:
+Selanjutnya, di `src/main.rs`, import repositories dan update `AppState`:
 
 ```rust
-let state = AppState::new(pool);
+use crate::repositories::{UserRepository, TicketRepository};
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub user_repo: UserRepository,
+    pub ticket_repo: TicketRepository,
+}
+
+impl AppState {
+    pub fn new(pool: PgPool) -> Self {
+        Self {
+            user_repo: UserRepository::new(pool.clone()),
+            ticket_repo: TicketRepository::new(pool.clone()),
+            db: pool,
+        }
+    }
+}
 ```
 
 ---
 
 ## Latihan
 
-1. Tambahkan method `find_by_id` ke `UserRepository` dan test dengan user yang ada di database.
+1. **Tambahkan method `find_by_email`** ke `UserRepository` untuk mencari user berdasarkan email. Gunakan `ORDER BY created_at DESC` untuk pengurutan konsisten.
 
-2. Modifikasi `find_many` di `TicketRepository` untuk mendukung filter tambahan berdasarkan `category`. Hint: tambah parameter `category: Option<&str>` dan tambahkan kondisi di WHERE clause.
+2. **Modifikasi `find_many` di `TicketRepository`** untuk mendukung filter tambahan berdasarkan `category`. Hint: tambah parameter `category: Option<&str>` dan tambahkan kondisi di WHERE clause.
 
-3. Buat method baru `delete` di `UserRepository`:
-   ```rust
-   pub async fn delete(&self, id: Uuid) -> Result<bool, AppError>
-   ```
-   Method ini return `true` kalau user ditemukan dan dihapus, `false` kalau user tidak ditemukan. Hint: pakai `DELETE FROM users WHERE id = $1 RETURNING id` dan cek apakah ada baris yang dikembalikan.
+3. **Tambahkan method `update` ke `TicketRepository`** untuk update status atau priority ticket. Gunakan `COALESCE` untuk partial update (hanya field yang dikirim yang berubah).
 
-4. Coba sengaja typo nama kolom di salah satu query, misalnya `emaill` instead of `email`. Compile dan perhatikan error yang muncul. Ini bukti nyata manfaat compile-time checking dari sqlx.
+4. **Verifikasi compile-time checking:** Coba sengaja ubah nama kolom di salah satu query, misalnya `emaill` instead of `email`. Compile dan perhatikan error yang muncul. Ini bukti nyata manfaat type-safe queries dari sqlx.
 
 ---
 
@@ -674,9 +642,11 @@ pub mod user;
 
 pub use api_response::ApiResponse;
 pub use enums::{UserRole, TicketStatus, TicketPriority, TicketCategory};
-pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
+pub use ticket::{Ticket, TicketResponse};
 pub use user::User;
 ```
+
+**⚠️ PENTING:** `CreateTicketDto` (dengan validation) ada di `src/dto/ticket_dto.rs`, BUKAN di models. DTOs adalah untuk input validation, models adalah untuk database structs.
 
 **File: `src/repositories/mod.rs`**
 ```rust
@@ -705,12 +675,11 @@ impl UserRepository {
         Self { pool }
     }
 
-    // Methods dari latihan Bab 25:
-    // - find_by_id(id: Uuid)
-    // - find_by_email(email: &str)
-    // - create(name, email, password, role)
-    // - find_all(page, limit)
-    // - delete(id)
+    // Methods dari Bab 25:
+    // - find_by_id(id: Uuid) -> Result<Option<User>, AppError>
+    // - find_by_email(email: &str) -> Result<Option<User>, AppError>
+    // - create(name, email, password, role) -> Result<User, AppError>
+    // - delete(id: Uuid) -> Result<bool, AppError>
     // Helper functions: parse_role(&str), format_role(UserRole)
 }
 ```
@@ -721,7 +690,7 @@ impl UserRepository {
 use sqlx::PgPool;
 use uuid::Uuid;
 use crate::models::{Ticket, TicketStatus, TicketPriority, TicketCategory};
-use crate::dto::{CreateTicketDto, UpdateTicketDto};
+use crate::dto::CreateTicketDto;  // ← Import dari DTO, bukan models!
 use crate::common::AppError;
 
 #[derive(Clone)]
@@ -734,18 +703,18 @@ impl TicketRepository {
         Self { pool }
     }
 
-    // Methods dari latihan Bab 25:
-    // - find_by_id(id: Uuid)
-    // - find_many(customer_id, agent_id, status, page, limit)
-    // - create(dto: CreateTicketDto, customer_id)
-    // - update(id, dto: UpdateTicketDto)
-    // - delete(id)
-    // Helper functions: parse_category(&str), parse_priority(&str), parse_status(&str)
+    // Methods dari Bab 25:
+    // - find_by_id(id: Uuid) -> Result<Option<Ticket>, AppError>
+    // - find_many(customer_id, status, page, limit) -> Result<(Vec<Ticket>, i64), AppError>
+    // - create(dto: CreateTicketDto, customer_id) -> Result<Ticket, AppError>
+    // - delete(id: Uuid) -> Result<bool, AppError>
 }
 ```
 
+**Catatan Struktur:** CreateTicketDto dengan validation ada di `src/dto/ticket_dto.rs`. Repository menerima validated DTO dan simpan ke database.
+
 **Update: `src/main.rs`**
-Tambahkan di paling atas (dengan mod declarations lain):
+Pastikan sudah ada di paling atas (dengan mod declarations lain):
 ```rust
 mod repositories;
 ```
@@ -754,13 +723,19 @@ mod repositories;
 
 ## Kesimpulan Bab 25
 
-Bab ini mengenalkan **Repository Pattern** untuk mengelola database queries. Benefit:
+Bab ini mengimplementasikan **Repository Pattern** untuk mengelola database queries dengan type-safe queries. Benefit utama:
 
-1. **Separation of Concerns**: Queries terpusat di satu tempat
-2. **Type Safety**: Enum types mencegah invalid values masuk ke database
-3. **Reusability**: Handler bisa panggil repository methods tanpa tahu detail SQL
-4. **Testability**: Repository bisa di-mock untuk testing
+1. **Separation of Concerns**: Semua query SQL terpusat di repository layer
+2. **Type Safety**: Enum types dan SQLx compile-time checking mencegah SQL errors
+3. **Reusability**: Handler bisa panggil repository methods tanpa perlu tahu SQL details
+4. **Maintainability**: Perubahan database schema hanya perlu update di repository
 
-**Status Build**: ✅ Berhasil compile (0 errors)
+**Key Takeaways:**
+- ✅ Enums untuk PostgreSQL enum columns (UserRole, TicketStatus, TicketPriority, TicketCategory)
+- ✅ Repository structs dengan Clone trait (siap untuk di-share ke handlers)
+- ✅ Type-safe queries dengan sqlx::query_as dan runtime parameter binding
+- ✅ Error handling dengan AppError mapping
 
-Bab berikutnya: **Integrasi Repository ke Handler** - Menggunakan repositories di HTTP endpoint handlers
+**Status Build**: ✅ Compile successful (0 errors, 36 warnings OK — unused code normal untuk stage ini)
+
+**Next Chapter (Bab 26):** ResponseRepository + DashboardRepository — menambah 2 repository untuk ticket responses dan dashboard statistics

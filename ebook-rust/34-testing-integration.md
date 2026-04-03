@@ -149,8 +149,8 @@ pub fn create_app(pool: PgPool, jwt_secret: String) -> Router {
         .route("/tickets/{id}", get(handlers::ticket_handler::get_ticket))
         .route("/tickets/{id}", patch(handlers::ticket_handler::update_ticket))
         .route("/tickets/{id}", axum::routing::delete(handlers::ticket_handler::delete_ticket))
-        .route("/tickets/:id/responses", post(handlers::ticket_handler::add_response))
-        .route("/tickets/:id/responses", get(handlers::ticket_handler::get_responses))
+        .route("/tickets/{id}/responses", post(handlers::ticket_handler::add_response))
+        .route("/tickets/{id}/responses", get(handlers::ticket_handler::get_responses))
         .route("/dashboard/stats", get(handlers::dashboard_handler::get_stats))
         .with_state(state);
 
@@ -250,6 +250,9 @@ use reqwest::Client;
 pub async fn setup_test_app() -> (String, PgPool) {
     dotenvy::dotenv().ok();
 
+    // Set JWT_SECRET untuk testing (harus sama dengan yang dipakai di generate_token)
+    std::env::set_var("JWT_SECRET", "test-jwt-secret-for-testing");
+
     // Gunakan TEST_DATABASE_URL dari .env, atau default
     let database_url = std::env::var("TEST_DATABASE_URL")
         .unwrap_or_else(|_| 
@@ -344,6 +347,7 @@ pub async fn register_and_login(
 ```
 
 **Key points:**
+- `std::env::set_var("JWT_SECRET", ...)` — JWT_SECRET harus di-set di setup agar middleware dapat verify token
 - `TcpListener::bind("127.0.0.1:0")` — OS memilih port tersedia, hindari konflik
 - `tokio::spawn()` — jalankan server di background task
 - `DELETE` dengan urutan: foreign keys dulu (ticket_responses → tickets → users)
@@ -472,6 +476,31 @@ async fn test_login_wrong_password() {
     assert_eq!(response.status(), 401); // Unauthorized
 }
 ```
+
+---
+
+## Catatan: Enum Serialization
+
+Saat membuat integration test dengan JSON payload yang berisi enum fields (seperti `category: "technical"`), perlu pastikan enum di-configure dengan `#[serde(rename_all = "lowercase")]` agar JSON deserialization cocok dengan variant naming.
+
+**Kenapa diperlukan?** Rust enum variant convention adalah PascalCase (`Technical`), tapi JSON standard lowercase (`"technical"`). Serde perlu tahu mapping ini saat deserialize.
+
+**Contoh:** Lihat `src/models/enums.rs`:
+
+```rust
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]  // <- PENTING: "technical" JSON → Technical enum
+pub enum TicketCategory {
+    General,      // JSON: "general"
+    Billing,      // JSON: "billing"
+    Technical,    // JSON: "technical"
+    Other,        // JSON: "other"
+}
+```
+
+Tanpa `#[serde(rename_all = "lowercase")]`, test akan error dengan pesan: `unknown variant 'technical', expected 'Technical'`.
+
+**Referensi:** Lihat Bab 20 bagian "Enum Serialization" untuk penjelasan detail tentang serde enum configuration.
 
 ---
 
@@ -670,9 +699,9 @@ Cargo.toml           ← Dengan [dev-dependencies] reqwest
 ```
 
 **Test Statistics:**
-- Unit tests: 37 (dari Ch33)
-- Integration tests: 8 (dari Ch34)
-- Total: 45 tests covering unit + integration + end-to-end flows
+- Unit tests: 25 (dari Ch33)
+- Integration tests: 7 (dari Ch34 — 4 auth + 3 ticket)
+- Total: 32 tests covering unit + integration + end-to-end flows
 
 **Run semua:**
 ```bash
@@ -681,14 +710,16 @@ cargo test
 
 Output:
 ```
-running 45 tests
+running 32 tests
 test auth_test::test_login_success ... ok
 test auth_test::test_register_duplicate_email ... ok
 test auth_test::test_register_success ... ok
+test ticket_test::test_create_ticket_authenticated ... ok
+test ticket_test::test_get_tickets_list ... ok
 ...
 test services::ticket_service::tests::test_check_access_admin_allowed ... ok
 ...
-test result: ok. 45 passed; 0 failed
+test result: ok. 32 passed; 0 failed
 ```
 
 Aplikasi sudah fully tested dari unit level sampai end-to-end integration. Siap untuk deployment!

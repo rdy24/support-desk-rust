@@ -287,6 +287,34 @@ pub created_at: String,
 pub timestamp: u64,  // di JSON muncul sebagai "ts"
 ```
 
+### Enum Serialization: `#[serde(rename_all = "lowercase")]`
+
+Enum memerlukan perlakuan khusus saat deserialize dari JSON. Rust enum convention menggunakan **PascalCase** (misal `Technical`, `High`), tapi JSON biasanya lowercase (misal `"technical"`, `"high"`). Untuk enum, gunakan:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]  // <- PENTING untuk enum
+pub enum TicketCategory {
+    General,      // JSON: "general"
+    Billing,      // JSON: "billing"
+    Technical,    // JSON: "technical"
+    Other,        // JSON: "other"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]  // <- PENTING untuk enum
+pub enum TicketPriority {
+    Low,          // JSON: "low"
+    Medium,       // JSON: "medium"
+    High,         // JSON: "high"
+    Urgent,       // JSON: "urgent"
+}
+```
+
+Tanpa `#[serde(rename_all = "lowercase")]`, Serde akan expect JSON dengan `"Technical"` (capital T) dan akan error dengan `"technical"` (lowercase).
+
 ---
 
 ## Struktur Folder Models
@@ -342,7 +370,7 @@ Beberapa hal penting di sini. `Uuid` menghasilkan ID unik yang tidak bisa diteba
 
 **Lokasi:** Buat file baru bernama `ticket.rs` di dalam folder `src/models/`
 
-File ini berisi **dua** struct: `Ticket` (model utama) dan `CreateTicketDto` (untuk input dari client).
+File ini berisi **satu** struct: `Ticket` (model utama untuk database).
 
 **Isi file:**
 
@@ -370,26 +398,11 @@ pub struct Ticket {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-// ============================================
-// DTO: CreateTicketDto (untuk input dari client)
-// ============================================
-// DTO hanya berisi field yang BOLEH dikirim client.
-// Field seperti id, createdAt, status tidak boleh diisi client.
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTicketDto {
-    pub subject: String,
-    pub description: String,
-    pub category: String,
-    pub priority: String,
-}
 ```
 
 **Penjelasan:**
-- `agent_id` bertipe `Option<Uuid>` karena tiket baru belum tentu punya agen. Kalau belum assign, nilainya `None` dan tidak akan muncul di JSON response.
-- `CreateTicketDto` hanya punya `Deserialize` (terima dari client), bukan `Serialize` (kirim ke client).
+- `agent_id` bertipe `Option<Uuid>` karena tiket baru belum tentu punya agen. Kalau belum assign, nilainya `None` dan tidak akan muncul di JSON response karena ada `#[serde(skip_serializing_if = "Option::is_none")]`.
+- Untuk DTO (seperti `CreateTicketDto`), akan dibuat di Bab 21 di folder `src/dto/` terpisah dari models.
 
 ---
 
@@ -509,13 +522,13 @@ use crate::models::{ApiResponse, Ticket, User};
 
 Coba kerjakan latihan berikut untuk memastikan kamu paham:
 
-1. **Buat struct `TicketResponse`:** model untuk respons tiket (bukan tiket itu sendiri). Field: `id: Uuid`, `ticket_id: Uuid`, `user_id: Uuid`, `message: String`, `created_at: DateTime<Utc>`. Tambahkan derive yang sesuai dan `rename_all = "camelCase"`.
+1. **Buat struct `TicketResponse`:** Di `src/models/ticket.rs`, tambahkan struct baru bernama `TicketResponse` dengan 5 field: `id` (Uuid), `ticket_id` (Uuid), `user_id` (Uuid), `message` (String), `created_at` (DateTime<Utc>). Jangan lupa `#[derive(Debug, Serialize, Deserialize, Clone)]` dan `#[serde(rename_all = "camelCase")]`. Kemudian update `src/models/mod.rs` untuk export `TicketResponse`.
 
-2. **Buat `CreateTicketResponseDto`:** DTO untuk menerima input respons tiket dari agent. Hanya boleh ada field `message: String`.
+2. **Uji serialisasi manual:** di `main.rs`, sebelum `#[tokio::main]`, tambahkan test function yang membuat instance `User` dummy lalu print dengan `serde_json::to_string_pretty(&user).unwrap()`. Verifikasi bahwa field `password` tidak muncul di output JSON.
 
-3. **Uji serialisasi manual:** di `main.rs` atau file test, buat instance `User` dummy lalu print dengan `serde_json::to_string_pretty(&user).unwrap()`. Verifikasi bahwa field `password` tidak muncul di output.
+3. **Explore field `agent_id`:** buat instance `Ticket` dengan `agent_id: None`, lalu serialize ke JSON. Verifikasi bahwa field `agent_id` tidak muncul dalam JSON (karena `#[serde(skip_serializing_if = "Option::is_none")]`). Lalu coba dengan `agent_id: Some(uuid)` dan verifikasi field muncul.
 
-4. **Tantangan:** Ubah field `role` di `User` menjadi enum `Role` dengan variant `Admin`, `Agent`, `Customer`. Tambahkan `#[serde(rename_all = "lowercase")]` di enum agar di JSON muncul sebagai `"admin"`, `"agent"`, `"customer"`. ⚠️ **OPTIONAL**
+4. **Tantangan - Ubah field `role` menjadi enum (OPTIONAL):** Di `src/models/user.rs`, ubah field `role: String` menjadi `role: Role` enum dengan variant `Admin`, `Agent`, `Customer`. Tambahkan `#[serde(rename_all = "lowercase")]` agar di JSON muncul sebagai `"admin"`, `"agent"`, `"customer"`.
 
 ---
 
@@ -541,12 +554,16 @@ support-desk/
 | File | Status | Deskripsi |
 |------|--------|-----------|
 | `src/main.rs` | ✏️ DIUPDATE | Hanya tambah: `mod models;` |
-| `src/models/mod.rs` | 🆕 BARU | Mengexport 3 struct: ApiResponse, Ticket, User |
-| `src/models/user.rs` | 🆕 BARU | Struct User dengan fields: id, name, email, password, role, dll |
-| `src/models/ticket.rs` | 🆕 BARU | 2 struct: Ticket (model) dan CreateTicketDto (input) |
-| `src/models/api_response.rs` | 🆕 BARU | Generic ApiResponse<T> wrapper |
+| `src/models/mod.rs` | 🆕 BARU | Export 4 public items: ApiResponse, Ticket, TicketResponse, User |
+| `src/models/user.rs` | 🆕 BARU | Struct User dengan 7 fields + serde attributes |
+| `src/models/ticket.rs` | 🆕 BARU | Struct Ticket + TicketResponse (dari latihan #1) |
+| `src/models/api_response.rs` | 🆕 BARU | Generic ApiResponse<T> wrapper untuk API responses |
 
 **Total: 5 file dalam folder src/** (main.rs + 1 models folder dengan 4 file)
+
+⚠️ **Catatan penting:** 
+- **Models** (Bab 20): Representasi data di database dan response dari API. Contoh: `User`, `Ticket`, `TicketResponse`.
+- **DTOs** (Bab 21): Representasi input dari client. Contoh: `CreateTicketDto`, `RegisterDto`, `LoginDto`. DTO akan dibuat di folder `src/dto/` terpisah dari models.
 
 **File 1: `src/models/user.rs`**
 ```rust
@@ -589,34 +606,6 @@ pub struct Ticket {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTicketDto {
-    pub subject: String,
-    pub description: String,
-    pub category: String,
-    pub priority: String,
-}
-
-// ============================================
-// Dari latihan Bab 20
-// ============================================
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct TicketResponse {
-    pub id: Uuid,
-    pub ticket_id: Uuid,
-    pub user_id: Uuid,
-    pub message: String,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateTicketResponseDto {
-    pub message: String,
-}
 ```
 
 **File 3: `src/models/api_response.rs`**
@@ -650,6 +639,19 @@ impl<T: Serialize> ApiResponse<T> {
 }
 ```
 
+**File 3 (lanjutan): `src/models/ticket.rs`** — Tambahkan TicketResponse di akhir file:
+```rust
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketResponse {
+    pub id: Uuid,
+    pub ticket_id: Uuid,
+    pub user_id: Uuid,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+```
+
 **File 4: `src/models/mod.rs`**
 ```rust
 pub mod api_response;
@@ -657,7 +659,7 @@ pub mod ticket;
 pub mod user;
 
 pub use api_response::ApiResponse;
-pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
+pub use ticket::{Ticket, TicketResponse};
 pub use user::User;
 ```
 

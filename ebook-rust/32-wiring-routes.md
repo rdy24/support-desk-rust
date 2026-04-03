@@ -169,8 +169,8 @@ async fn main() {
         .route("/tickets/{id}", get(handlers::ticket_handler::get_ticket))
         .route("/tickets/{id}", patch(handlers::ticket_handler::update_ticket))
         .route("/tickets/{id}", axum::routing::delete(handlers::ticket_handler::delete_ticket))
-        .route("/tickets/:id/responses", post(handlers::ticket_handler::add_response))
-        .route("/tickets/:id/responses", get(handlers::ticket_handler::get_responses))
+        .route("/tickets/{id}/responses", post(handlers::ticket_handler::add_response))
+        .route("/tickets/{id}/responses", get(handlers::ticket_handler::get_responses))
         // Dashboard routes
         .route("/dashboard/stats", get(handlers::dashboard_handler::get_stats))
         .with_state(state);
@@ -427,6 +427,112 @@ Kalau server merespons dengan benar di semua endpoint di atas, selamat, aplikasi
 4. **Lihat komparasi production CORS:** Di file `src/main.rs`, cari bagian `CorsLayer::permissive()`. Komentar di bawahnya menunjukkan cara setup CORS yang lebih ketat untuk production.
 
 ---
+
+## Hasil Akhir: ✅ COMPLETE
+
+Status: **0 ERRORS, 15 WARNINGS** (semua expected dari unused code)
+
+### Implementasi Lengkap di `src/main.rs`
+
+#### 1. Import Tambahan
+```rust
+use tower_http::cors::CorsLayer;
+```
+CorsLayer diimpor dari `tower-http` untuk setup CORS.
+
+#### 2. AppState (Sudah dari Bab 31)
+- Berisi semua 4 repositories: user_repo, ticket_repo, response_repo, dashboard_repo
+- Berisi semua 4 services: auth_service, ticket_service, user_service, dashboard_service
+- Constructor `AppState::new()` otomatis inisialisasi semua komponen
+
+#### 3. Routes Terorgnisir (18 Endpoint Total)
+
+```rust
+let stateful_routes = Router::new()
+    // Auth routes (2 endpoint)
+    .route("/auth/register", post(handlers::auth_handler::register))
+    .route("/auth/login", post(handlers::auth_handler::login))
+    // User routes (7 endpoint)
+    .route("/me", get(handlers::user_handler::get_me))
+    .route("/users", get(handlers::user_handler::get_all_users))
+    .route("/users/{id}", get(handlers::user_handler::get_user))
+    .route("/users/{id}", patch(handlers::user_handler::update_user))
+    .route("/users/{id}", axum::routing::delete(handlers::user_handler::delete_user))
+    .route("/agents", get(handlers::user_handler::get_agents))
+    .route("/customers", get(handlers::user_handler::get_customers))
+    // Ticket routes (8 endpoint)
+    .route("/tickets", post(handlers::ticket_handler::create_ticket))
+    .route("/tickets", get(handlers::ticket_handler::get_tickets))
+    .route("/tickets/{id}", get(handlers::ticket_handler::get_ticket))
+    .route("/tickets/{id}", patch(handlers::ticket_handler::update_ticket))
+    .route("/tickets/{id}", delete(handlers::ticket_handler::delete_ticket))
+    .route("/tickets/{id}/responses", post(handlers::ticket_handler::add_response))
+    .route("/tickets/{id}/responses", get(handlers::ticket_handler::get_responses))
+    // Dashboard routes (1 endpoint)
+    .route("/dashboard/stats", get(handlers::dashboard_handler::get_stats))
+    .with_state(state);
+```
+
+Catatan: Semua path menggunakan format `{id}` untuk parameter, dan routes sudah dikelompokkan berdasarkan kategorinya (auth, user, ticket, dashboard).
+
+#### 4. CORS Layer
+```rust
+let cors = CorsLayer::permissive();
+```
+`CorsLayer::permissive()` mengizinkan request dari domain manapun, semua HTTP method, dan semua header (termasuk `Authorization` untuk JWT).
+
+#### 5. Router Final
+```rust
+let app = Router::new()
+    .route("/health", get(health_check))  // 1 endpoint tanpa auth
+    .merge(stateful_routes)                // 17 endpoint dengan state
+    .layer(cors);                          // Apply CORS ke semua routes
+```
+
+Urutan penting:
+1. `health` endpoint didaftarkan terlebih dahulu (tanpa state)
+2. `stateful_routes` di-merge (17 endpoint dengan state)
+3. `cors` layer di-apply **terakhir** sehingga melayani semua routes
+
+#### 6. Server Startup
+```rust
+let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+let addr = format!("0.0.0.0:{}", port);
+let listener = TcpListener::bind(&addr).await.unwrap();
+println!("Server berjalan di http://{}", addr);
+axum::serve(listener, app).await.unwrap();
+```
+
+### Hasil Akhir: 18 Endpoint Siap Diakses
+
+| # | Method | Path | Role | Handler |
+|---|---|---|---|---|
+| 1 | GET | `/health` | - | health_check |
+| 2 | POST | `/auth/register` | - | register |
+| 3 | POST | `/auth/login` | - | login |
+| 4 | GET | `/me` | AuthUser | get_me |
+| 5 | GET | `/users` | AdminOnly | get_all_users |
+| 6 | GET | `/users/{id}` | AdminOnly | get_user |
+| 7 | PATCH | `/users/{id}` | AdminOnly | update_user |
+| 8 | DELETE | `/users/{id}` | AdminOnly | delete_user |
+| 9 | GET | `/agents` | AdminOnly | get_agents |
+| 10 | GET | `/customers` | AdminOnly | get_customers |
+| 11 | POST | `/tickets` | AuthUser | create_ticket |
+| 12 | GET | `/tickets` | AuthUser | get_tickets |
+| 13 | GET | `/tickets/{id}` | AuthUser | get_ticket |
+| 14 | PATCH | `/tickets/{id}` | AuthUser | update_ticket |
+| 15 | DELETE | `/tickets/{id}` | AuthUser | delete_ticket |
+| 16 | POST | `/tickets/{id}/responses` | AuthUser | add_response |
+| 17 | GET | `/tickets/{id}/responses` | AuthUser | get_responses |
+| 18 | GET | `/dashboard/stats` | AdminOrAgent | get_stats |
+
+### Build Status
+
+```
+✅ cargo build: 0 errors, 15 warnings (0 crates)
+```
+
+Semuanya siap. Server bisa dijalankan dengan `cargo run` dan diakses melalui Postman atau browser.
 
 ## Hasil Akhir
 

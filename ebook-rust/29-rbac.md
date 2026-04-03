@@ -18,27 +18,28 @@ Di Rust dengan Axum, pendekatannya berbeda. Karena Rust adalah bahasa yang *type
 
 ---
 
-## Kunci Jawaban & State Sebelumnya
+## State Awal Bab 29
 
-**Kunci Jawaban Latihan Bab 28:**
-- JWT middleware dengan token verification sudah di `src/middleware/auth.rs` dari "Hasil Akhir Bab 28"
-- Claims ekstraction dari token sudah lengkap
-- `AuthUser` extractor siap untuk dikomposisi
+Dari Bab 28, sudah ada:
+- ✅ JWT middleware dengan token verification di `src/middleware/auth.rs`
+- ✅ Claims extraction dari token
+- ✅ `AuthUser` extractor yang siap untuk dikomposisi dengan role extractors
+- ✅ UserRole enum dengan PartialEq (dari Bab 24)
+- ✅ parse_role() helper untuk string → enum conversion
 
-**State Sebelumnya:**
-Dari Bab 28, middleware JWT sudah bisa extract & verify token. Sekarang Bab 29 tambah custom extractor untuk role checking.
+Sekarang Bab 29 tambah custom extractors untuk role-based access control.
 
 ---
 
-## UserRole Enum: Siap untuk Perbandingan
+## UserRole Enum: PartialEq Sudah Ada
 
-Di Bab 24 kita sudah definisikan `UserRole` enum untuk database. Sekarang kita tambahkan trait `PartialEq` supaya bisa bandingkan role dengan `==` dan `!=`:
+UserRole enum dari Bab 24 sudah punya `PartialEq` derive:
 
 ```rust
 // src/models/enums.rs
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[derive(Type)]
+#[derive(sqlx::Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -47,21 +48,24 @@ pub enum UserRole {
 }
 ```
 
-`#[derive(PartialEq)]` ini membuat kita bisa bandingkan dua nilai `UserRole` dengan operator `!=` dan `==`. Contoh: `claims.role != UserRole::Admin`.
+Dengan `#[derive(PartialEq)]`, kita bisa bandingkan dua nilai `UserRole` dengan operator `!=` dan `==`.
+Contoh: `role != UserRole::Admin` atau `role == UserRole::Customer`.
 
 ---
 
-## Claims Masih Pakai String (Kenapa?)
+## Claims Pakai String, Extractor Pakai Enum
 
 Di Bab 28, Claims disimpan dengan `role: String`. Kenapa nggak langsung `role: UserRole`?
 
 JWT adalah standard format untuk serialize data ke JSON dan back. Waktu kita encode Claims ke token, semua field harus bisa di-serialize jadi string. Kalau kita pakai `UserRole` enum langsung, serde akan serialize jadi `"Admin"` (CamelCase), tapi database kita pakai lowercase `"admin"`. Berantakan.
 
-Solusinya: simpan di Claims sebagai String (cocok dengan format JWT), trus convert ke UserRole enum waktu kita mau cek role di extractor. Kita pakai helper `parse_claims_role()`:
+**Solusi yang dipakai di project:**
+- Di `generate_token()` (Bab 28): Konversi `UserRole` enum → lowercase string menggunakan `role_to_string()` untuk disimpan di JWT
+- Di extractors (Bab 29): Konversi string dari JWT claims → `UserRole` enum menggunakan `parse_claims_role()` untuk type-safe role checking
+
+Tambahkan helper `parse_claims_role()` ke `src/services/auth_service.rs`:
 
 ```rust
-// src/services/auth_service.rs
-
 /// Helper: Konversi string role dari JWT claims ke enum UserRole
 pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
     match role {
@@ -353,6 +357,8 @@ pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
 
 ### Step 3: `src/services/mod.rs` — Re-export parse_claims_role
 
+Update exports:
+
 ```rust
 pub mod auth_service;
 
@@ -361,14 +367,14 @@ pub use auth_service::{AuthService, Claims, verify_token, parse_claims_role};
 
 ---
 
-### Step 4: `src/middleware/auth.rs` — Tambah 3 Extractor Baru
+### Step 4: `src/middleware/auth.rs` — Tambah Imports dan 3 Extractor Baru
 
 ```rust
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use crate::common::AppError;
-use crate::services::{Claims, verify_token, parse_claims_role};
 use crate::models::UserRole;
+use crate::services::{Claims, verify_token, parse_claims_role};
 
 /// Custom extractor untuk authenticated users (any role)
 pub struct AuthUser(pub Claims);
@@ -533,3 +539,25 @@ curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/me
 ```
 
 Harusnya kelihat info user (id, email, role) dengan status 200.
+
+---
+
+## Kesimpulan Bab 29
+
+**Implementasi RBAC (Role-Based Access Control):**
+- ✅ UserRole enum dengan PartialEq untuk type-safe role comparison
+- ✅ `parse_claims_role()` helper - konversi string dari JWT → UserRole enum
+- ✅ `AdminOnly` extractor - restrict access ke admin saja
+- ✅ `AdminOrAgent` extractor - restrict access ke admin atau agent
+- ✅ `CustomerOnly` extractor - restrict access ke customer saja
+
+**Key Pattern:**
+- Extractors compose `AuthUser` terlebih dahulu (verify token)
+- Kemudian parse role string → enum
+- Kemudian check role dengan `!=` operator (type-safe)
+- Jika role tidak match, return `AppError::Forbidden` (HTTP 403)
+
+**Keamanan Type-Safe:**
+Karena extractor adalah Rust trait yang compile-time checked, handler yang membutuhkan `AdminOnly` WAJIB declare itu di parameter. Rust compiler tidak akan compile kalau lupa. Ini lebih kuat dari runtime checks yang bisa kelewat.
+
+**Status Build:** ✅ **0 errors, 22 warnings** (expected - unused extractors sampai dipakai di handlers)

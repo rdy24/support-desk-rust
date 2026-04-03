@@ -10,16 +10,14 @@ JWT (token yang kamu dapatkan setelah login) akan dibahas detail di bab 28. Di b
 
 ---
 
-## Kunci Jawaban & State Sebelumnya
+## State Awal Bab 27
 
-**Kunci Jawaban Latihan Bab 26:**
-- Dashboard queries dan response queries sudah tercakup di "Hasil Akhir Bab 26"
-- `ResponseRepository`, `DashboardRepository`, dan `DashboardStats` sudah siap
-
-**State Sebelumnya:**
-- Folder `src/repositories/` lengkap dengan 4 repositories (user, ticket, response, dashboard)
-- `AppState` include semua repositories
-- `src/dto/user_dto.rs` sudah punya `RegisterDto` dan `LoginDto` dengan validation attributes
+Dari Bab 26, sudah ada:
+- ✅ Folder `src/repositories/` dengan 4 repositories (user, ticket, response, dashboard)
+- ✅ `AppState` dengan semua repositories
+- ✅ `src/dto/user_dto.rs` dengan `RegisterDto` dan `LoginDto` (sudah punya validation attributes)
+- ✅ `Cargo.toml` sudah include `argon2` untuk password hashing
+- ✅ `validator` crate untuk input validation
 
 Verifikasi:
 ```bash
@@ -274,6 +272,29 @@ pub async fn login(
 
 ## Update AppState dan Router di main.rs
 
+### Update Module Declarations
+
+Di `src/main.rs`, tambahkan modules untuk services dan handlers (lines 1-7):
+
+```rust
+mod models;
+mod dto;
+mod common;
+mod db;
+mod repositories;
+mod services;          // ← TAMBAH
+mod handlers;          // ← TAMBAH
+```
+
+### Update Imports
+
+Tambahkan import untuk AuthService dan post routing:
+
+```rust
+use axum::routing::{get, post};  // ← Tambah post
+use crate::services::AuthService;  // ← Tambah
+```
+
 ### Update AppState
 
 Di `src/main.rs`, tambahkan `auth_service` field ke `AppState`:
@@ -307,7 +328,7 @@ impl AppState {
 
 ### Setup Router dengan State
 
-Di `src/main.rs`, ganti router setup (setelah migrations):
+Di `src/main.rs` (dalam `main()` function, setelah migrations):
 
 ```rust
 // Buat AppState dengan semua repositories dan services
@@ -315,24 +336,24 @@ let state = AppState::new(pool);
 
 // Setup auth routes dengan state
 let auth_routes = Router::new()
-    .route("/auth/register", post(handlers::auth_handler::register))
-    .route("/auth/login", post(handlers::auth_handler::login))
-    .with_state(state);
+    .route("/register", post(handlers::auth_handler::register))
+    .route("/login", post(handlers::auth_handler::login))
+    .with_state(state.clone());
 
 // Setup router dengan semua routes
 let app = Router::new()
     .route("/health", get(health_check))
-    .merge(auth_routes)
+    .nest("/auth", auth_routes)
     .nest("/tickets", ticket_routes())
     .nest("/users", user_routes());
 ```
 
 **Penjelasan router state:**
-- `Router::new().route(...).with_state(state)` membuat `Router<AppState>` (router yang mempunyai state)
-- Handler yang memakai `State<AppState>` hanya bisa di-add ke router dengan state ini
-- Kita membangun auth routes sebagai sub-router dengan state, lalu `.merge()` ke main router
-- `.merge()` menggabungkan dua routers; semua route dari auth_routes ditambahkan ke main router
-- Existing ticket_routes() dan user_routes() tidak memakai state (mereka `Router<()>`), tapi `.nest()` masih bisa merge mereka
+- `with_state(state)` membuat router yang mempunyai state type `AppState`
+- Handler yang memakai `State<AppState>` di-extract dari state ini otomatis
+- `.nest("/auth", auth_routes)` menempatkan auth routes di `/auth/register` dan `/auth/login`
+- `state.clone()` aman karena semua field di `AppState` adalah Clone-able
+- Existing `ticket_routes()` dan `user_routes()` tanpa state (mereka `Router<()>`), bisa di-nest dengan state router
 
 ---
 
@@ -357,9 +378,29 @@ let app = Router::new()
 
 ---
 
+## Kesimpulan Bab 27
+
+**Implementasi Auth - Register & Login:**
+- ✅ `AuthService` dengan `register()` dan `login()` methods
+- ✅ Password hashing dengan **Argon2** (secure, salt-included)
+- ✅ HTTP handlers untuk `/auth/register` dan `/auth/login`
+- ✅ Dependency injection: AuthService menerima UserRepository
+- ✅ Input validation via `RegisterDto` dan `LoginDto`
+- ✅ Error messages yang aman (don't distinguish email vs password errors)
+- ✅ AppState integration dan router setup
+
+**Key Security Points:**
+- Passwords hashed dengan Argon2 (brute-force resistant)
+- Login error message universal ("Email atau password salah") - hacker tak tahu email valid atau tidak
+- JWT token generation di Bab 28 (sekarang placeholder)
+
+**Status Build:** ✅ 0 errors, 15 warnings (expected)
+
+---
+
 ## Hasil Akhir Bab Ini
 
-Setelah menyelesaikan latihan Bab 27, struktur folder dan file harus seperti ini:
+Setelah menyelesaikan Bab 27, struktur folder dan file harus seperti ini:
 
 ```
 src/
@@ -387,19 +428,20 @@ pub use auth_service::AuthService;
 
 ### File: `src/services/auth_service.rs` — BARU
 
+**⚠️ PENTING:** Import `LoginDto` dan `RegisterDto` dari `dto::user_dto`, bukan langsung dari `dto`:
+
 ```rust
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+use validator::Validate;
 use crate::{
     common::AppError,
-    dto::{LoginDto, RegisterDto},
-    models::User,
-    models::UserRole,
+    dto::user_dto::{LoginDto, RegisterDto},  // ← Import dari user_dto module
+    models::{User, UserRole},
     repositories::UserRepository,
 };
-use validator::Validate;
 
 /// Service untuk menangani autentikasi (register, login)
 #[derive(Clone)]
@@ -491,7 +533,7 @@ pub mod auth_handler;
 ```rust
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::json;
-use crate::{dto::{LoginDto, RegisterDto}, AppState};
+use crate::{dto::user_dto::{LoginDto, RegisterDto}, AppState};  // ← Import dari user_dto
 
 /// Handler untuk register (POST /auth/register)
 pub async fn register(
@@ -583,14 +625,14 @@ let state = AppState::new(pool);
 
 // Setup auth routes dengan state
 let auth_routes = Router::new()
-    .route("/auth/register", post(handlers::auth_handler::register))
-    .route("/auth/login", post(handlers::auth_handler::login))
-    .with_state(state);
+    .route("/register", post(handlers::auth_handler::register))
+    .route("/login", post(handlers::auth_handler::login))
+    .with_state(state.clone());
 
 // Setup router dengan semua routes
 let app = Router::new()
     .route("/health", get(health_check))
-    .merge(auth_routes)
+    .nest("/auth", auth_routes)
     .nest("/tickets", ticket_routes())
     .nest("/users", user_routes());
 ```

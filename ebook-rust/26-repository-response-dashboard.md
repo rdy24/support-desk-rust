@@ -9,28 +9,49 @@ Kedua buku ini punya sifat yang sangat berbeda. Buku tamu = insert dan lookup pe
 
 ---
 
-## Kunci Jawaban & State Sebelumnya
+## State Awal Bab 26
 
-**Kunci Jawaban Latihan Bab 25:**
-- `UserRepository` dan `TicketRepository` lengkap dengan semua method (find_by_id, find_many, create, update, delete)
-- Enum types di `src/models/enums.rs` sudah ada: `UserRole`, `TicketStatus`, `TicketPriority`, `TicketCategory`
-- Model `User` dan `Ticket` sudah menggunakan enum types, bukan String
-
-**State Sebelumnya:**
-- Folder `src/repositories/` sudah ada dengan `user_repository.rs` dan `ticket_repository.rs`
-- `src/repositories/mod.rs` sudah export kedua repository
+Dari Bab 25, sudah ada:
+- ✅ `UserRepository` dan `TicketRepository` dengan semua methods
+- ✅ Enum types di `src/models/enums.rs`
+- ✅ Models `User` dan `Ticket` menggunakan enum types
+- ✅ Folder `src/repositories/` dengan `mod.rs`
+- ✅ `AppState` di `src/main.rs` (akan di-update)
 
 Verifikasi:
 ```bash
 cargo build
-# Harus 0 errors (warnings tentang unused code OK)
+# Harus 0 errors
 ```
 
 ---
 
-## State Sebelumnya: Persiapan Repositories
+## Persiapan: Tambah Model TicketResponse
 
-**PENTING:** Dari Bab 25, `UserRepository` dan `TicketRepository` HARUS sudah punya `#[derive(Clone)]`. Kalau belum, update di `src/repositories/user_repository.rs` dan `src/repositories/ticket_repository.rs`:
+Sebelum buat ResponseRepository, kita perlu model `TicketResponse` di `src/models/ticket.rs`:
+
+```rust
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketResponse {
+    pub id: Uuid,
+    pub ticket_id: Uuid,
+    pub user_id: Uuid,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+```
+
+Update `src/models/mod.rs`:
+```rust
+pub use ticket::{Ticket, TicketResponse};
+```
+
+---
+
+## Persiapan: Repositories Harus Clone
+
+`UserRepository` dan `TicketRepository` dari Bab 25 HARUS punya `#[derive(Clone)]`:
 
 ```rust
 #[derive(Clone)]
@@ -40,7 +61,25 @@ pub struct UserRepository { ... }
 pub struct TicketRepository { ... }
 ```
 
-Kenapa? Karena bab ini akan memasukkan keempat repositories ke `AppState`, yang sendiri derive `Clone`. PgPool sudah Clone-able (Arc internally), jadi aman untuk clone repositories.
+Kenapa? Karena bab ini akan wrap keempat repositories di `AppState`, yang sendiri derive `Clone`. PgPool adalah Arc internally, jadi aman di-clone.
+
+---
+
+## ⚠️ Important: Struktur DTO vs Models
+
+Sebelum buat ResponseRepository, perhatikan struktur yang benar:
+
+- **Models** (`src/models/`) = Database-aligned structs
+  - `User`, `Ticket`, `TicketResponse` — fields persis sesuai database columns
+- **DTO** (`src/dto/`) = Request/Response validation structs
+  - `CreateTicketDto` (dengan validation), `LoginDto`, dll — untuk input validation
+
+**Repository menggunakan keduanya:**
+```rust
+// Menerima DTO (sudah validated dari handler)
+pub async fn create(&self, dto: &CreateTicketDto, customer_id: Uuid) -> Result<Ticket, AppError>
+// Return Model yang di-query dari database
+```
 
 ---
 
@@ -359,15 +398,27 @@ impl AppState {
 
 ---
 
-## Latihan
+## Latihan Opsional
 
-1. **Tambah method `find_latest_by_ticket_id`** di `ResponseRepository`: ambil hanya balasan terbaru (1 baris) untuk tiket tertentu. Hint: gunakan `ORDER BY created_at DESC LIMIT 1` dan `.fetch_optional()`.
+**Sudah diimplementasikan:** 
+- ✅ Method `find_latest_by_ticket_id` di ResponseRepository
+- ✅ Field `avg_responses_per_ticket: f64` di DashboardStats dengan division by zero handling
 
-2. **Modifikasi `DashboardStats`:** tambahkan field `avg_responses_per_ticket: f64`. Kamu perlu hitung total responses dari tabel `ticket_responses`, bagi dengan total tiket. Hint: gunakan `sqlx::query_scalar` untuk COUNT satu nilai. Handle `total_tickets = 0` agar tidak division by zero.
+**Challenge Tambahan:**
 
-3. **Optimasi query dashboard:** coba gabungkan `ticket_stats` dan `user_stats` menjadi satu query dengan CROSS JOIN. Bandingkan keterbacaan code-nya dengan versi dua query terpisah. Mana yang lebih kamu sukai dan kenapa?
+1. **Optimasi query dashboard:** Coba gabungkan `ticket_stats` dan `user_stats` menjadi satu query dengan CROSS JOIN (atau WITH clause). Bandingkan keterbacaan kode dengan versi dua query terpisah. Mana yang lebih maintainable?
 
-4. **Error handling dengan logging:** saat ini kalau database error, kita return `AppError::Internal`. Coba tambahkan log error sebelum return, menggunakan macro `eprintln!("Database error: {:?}", e)` (simple version tanpa library `tracing`). Verifikasi log muncul di console saat error.
+2. **Add logging untuk errors:** Di setiap method, tambahkan `eprintln!` sebelum return error untuk debugging. Contoh:
+   ```rust
+   .map_err(|e| {
+       eprintln!("Database error in ResponseRepository::create: {}", e);
+       AppError::Internal(e.to_string())
+   })?
+   ```
+
+3. **Tambah method `count_responses_for_ticket`** di ResponseRepository untuk menghitung jumlah balasan per tiket tanpa load semua data.
+
+4. **Eksperimen dengan DashboardRepository:** Coba split `get_stats` menjadi beberapa method terpisah (`get_ticket_stats()`, `get_user_stats()`, `get_response_stats()`) untuk lebih modular. Pro dan kontra dari split ini?
 
 ---
 
@@ -690,15 +741,29 @@ cargo build
 
 ## Kesimpulan Bab 26
 
-Bab ini memperkenalkan:
+Bab ini mengimplementasikan dua repository khusus:
 
-1. **ResponseRepository** — untuk CRUD operations ticket_responses (insert, read, optional queries)
-2. **DashboardRepository** — untuk aggregate queries dengan `COUNT(*) FILTER (WHERE ...)`
-3. **AppState baru** — mengagregasi semua 4 repository dalam satu struct yang Cloneable, siap untuk di-inject ke handlers
+1. **ResponseRepository** — untuk CRUD ticket_responses dengan 3 methods:
+   - `create(ticket_id, user_id, message)` — simpan balasan
+   - `find_by_ticket_id(ticket_id)` — ambil semua balasan (urut kronologis)
+   - `find_latest_by_ticket_id(ticket_id)` — ambil balasan terbaru
 
-**Benefit Patterns:**
-- Separation of Concerns: Response queries di ResponseRepository, aggregates di DashboardRepository
-- Type Safety: Semua operations type-checked dengan sqlx
-- Reusability: Handlers nanti bisa call `state.response_repo.create(...)` atau `state.dashboard_repo.get_stats()`
+2. **DashboardRepository** — untuk aggregate statistics:
+   - `DashboardStats` struct dengan 9 fields statistik
+   - `get_stats()` — query aggregate dengan `COUNT(*) FILTER (WHERE ...)`
+   - Division by zero protection untuk `avg_responses_per_ticket`
 
-Bab berikutnya: **Integrasi Repository ke Handler** — menggunakan repositories ini di HTTP endpoint handlers
+3. **AppState Expansion** — gabung 4 repositories:
+   - UserRepository + TicketRepository (dari Bab 25)
+   - ResponseRepository + DashboardRepository (baru)
+   - Constructor `AppState::new(pool)` siap untuk di-inject ke handlers
+
+**Key Patterns:**
+- **Separation of Concerns:** Setiap repository fokus pada domain data-nya
+- **Aggregate Query Pattern:** Dashboard menggunakan `COUNT(*) FILTER` untuk efficiency
+- **Type Safety:** Temporary structs (`ResponseRow`, `TicketStatsRow`, dll) untuk mapping database → Rust
+- **Dependency Injection Ready:** AppState siap untuk passed ke handler via Axum state extraction
+
+**Status Build:** ✅ 0 errors, 17 warnings (expected — unused code OK)
+
+**Bab Berikutnya:** Bab 27 **Authentication (Register & Login)** — menggunakan repositories untuk user management dan JWT token generation

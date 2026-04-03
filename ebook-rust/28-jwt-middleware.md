@@ -53,9 +53,12 @@ let claims = token_data.claims;
 
 ## Claims Struct
 
-Pertama, definisikan struct untuk data yang akan disimpan di dalam JWT:
+Pertama, tambahkan struct untuk data yang akan disimpan di dalam JWT di `src/services/auth_service.rs`:
 
 ```rust
+use serde::{Deserialize, Serialize};
+
+/// JWT Claims - data yang disimpan dalam token
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,      // user id sebagai string
@@ -65,15 +68,21 @@ pub struct Claims {
 }
 ```
 
-Struct ini disimpan di `src/services/auth_service.rs`, bersama dengan AuthService.
+Struct ini ditambahkan di `src/services/auth_service.rs` bersama AuthService.
 
 ---
 
 ## Generate Token
 
-Update `AuthService` di `src/services/auth_service.rs` dengan dua perubahan:
+Update `AuthService` di `src/services/auth_service.rs`:
 
-**1. Tambah `jwt_secret` field dan update constructor:**
+**1. Add imports:**
+```rust
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use std::time::{SystemTime, UNIX_EPOCH};
+```
+
+**2. Tambah `jwt_secret` field ke struct dan update constructor:**
 
 ```rust
 #[derive(Clone)]
@@ -84,16 +93,18 @@ pub struct AuthService {
 
 impl AuthService {
     pub fn new(user_repo: UserRepository, jwt_secret: String) -> Self {
-        Self { user_repo, jwt_secret }
+        Self {
+            user_repo,
+            jwt_secret,
+        }
     }
-
-    // ... rest of methods
 }
 ```
 
-**2. Tambah method `generate_token`:**
+**3. Tambah method `generate_token`:**
 
 ```rust
+/// Generate JWT token untuk user
 pub fn generate_token(&self, user: &User) -> Result<String, AppError> {
     let expiry = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -103,7 +114,7 @@ pub fn generate_token(&self, user: &User) -> Result<String, AppError> {
     let claims = Claims {
         sub: user.id.to_string(),
         email: user.email.clone(),
-        role: format_role(&user.role),
+        role: role_to_string(&user.role),
         exp: expiry,
     };
 
@@ -116,27 +127,31 @@ pub fn generate_token(&self, user: &User) -> Result<String, AppError> {
 }
 ```
 
-Yang terjadi di sini: hitung waktu expired (sekarang + 7 hari dalam Unix timestamp), buat struct `Claims` dengan data user, lalu `encode` menghasilkan string JWT. `Header::default()` pakai algoritma `HS256` secara default.
+**4. Update `login()` method** untuk menggunakan `generate_token` bukan placeholder:
 
-**3. Update `login()` method** untuk menggunakan `generate_token`:
-
-Ganti baris placeholder:
 ```rust
-// Lama:
-Ok("token_placeholder".to_string())
-
-// Baru:
+// Dalam method login(), ganti:
 let token = self.generate_token(&user)?;
 Ok(token)
 ```
 
 ---
 
-## Verify Token
+## Verify Token & Helper Functions
 
-Tambah sebagai free function (public, bukan method) agar bisa digunakan di middleware:
+Tambahkan sebagai free functions (public, bukan method) di `src/services/auth_service.rs` agar bisa digunakan di middleware:
 
 ```rust
+/// Helper: Konversi enum UserRole ke string
+fn role_to_string(role: &UserRole) -> String {
+    match role {
+        UserRole::Admin => "admin".to_string(),
+        UserRole::Agent => "agent".to_string(),
+        UserRole::Customer => "customer".to_string(),
+    }
+}
+
+/// Verify JWT token (free function untuk middleware)
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AppError> {
     decode::<Claims>(
         token,
@@ -148,23 +163,11 @@ pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AppError> {
 }
 ```
 
-`Validation::default()` sudah otomatis cek signature dan memastikan token belum expired (field `exp`). Kalau salah satu gagal, langsung return `Unauthorized`.
-
----
-
-## Helper: format_role
-
-Karena `Claims.role` adalah `String`, tapi `User.role` adalah `UserRole` enum, kita butuh konversi:
-
-```rust
-fn format_role(role: &UserRole) -> String {
-    match role {
-        UserRole::Admin => "admin".to_string(),
-        UserRole::Agent => "agent".to_string(),
-        UserRole::Customer => "customer".to_string(),
-    }
-}
-```
+**Penjelasan:**
+- `role_to_string()` konversi enum ke string (untuk disimpan di JWT)
+- `verify_token()` public function untuk di-export ke services/mod.rs
+- `Validation::default()` otomatis cek signature dan memastikan token belum expired (field `exp`)
+- Kalau gagal, return `Unauthorized`
 
 ---
 
@@ -174,9 +177,19 @@ Ini bagian paling elegan dari Axum. Daripada parse header Authorization secara m
 
 *Extractor* adalah tipe yang implement trait `FromRequestParts`. Axum memanggil fungsi ini otomatis ketika tipe tersebut ada di parameter handler.
 
-[ILUSTRASI: diagram satpam (FromRequestParts) berdiri di depan pintu ruangan (handler) — semua tamu harus lewat satpam dulu sebelum masuk]
+**Buat folder dan files:**
+- `src/middleware/mod.rs`
+- `src/middleware/auth.rs`
 
-Buat folder dan file baru: `src/middleware/auth.rs`
+### File: `src/middleware/mod.rs`
+
+```rust
+pub mod auth;
+
+pub use auth::AuthUser;
+```
+
+### File: `src/middleware/auth.rs`
 
 ```rust
 use axum::extract::FromRequestParts;
@@ -184,6 +197,8 @@ use axum::http::request::Parts;
 use crate::common::AppError;
 use crate::services::{Claims, verify_token};
 
+/// Custom extractor untuk authenticated requests
+/// Gunakan: async fn handler(AuthUser(claims): AuthUser) -> ... {}
 pub struct AuthUser(pub Claims);
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -193,30 +208,41 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // Extract Authorization header
         let auth_header = parts
             .headers
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AppError::Unauthorized("Token diperlukan".to_string()))?;
 
+        // Strip "Bearer " prefix
         let token = auth_header
             .strip_prefix("Bearer ")
             .ok_or_else(|| {
                 AppError::Unauthorized("Format token salah, gunakan: Bearer <token>".to_string())
             })?;
 
+        // Get JWT_SECRET from environment
         let jwt_secret = std::env::var("JWT_SECRET")
             .map_err(|_| AppError::Internal("JWT_SECRET tidak dikonfigurasi".to_string()))?;
 
+        // Verify token
         let claims = verify_token(token, &jwt_secret)?;
         Ok(AuthUser(claims))
     }
 }
 ```
 
-Alur kerjanya: ambil header `Authorization` (kalau tidak ada, return 401), strip prefix `"Bearer "` (kalau format salah, return 401), verifikasi token (kalau invalid/expired, return 401), lalu return `AuthUser(claims)` kalau semua OK.
+**Alur kerjanya:**
+1. Ambil header `Authorization` (kalau tidak ada, return 401 Unauthorized)
+2. Strip prefix `"Bearer "` (kalau format salah, return 401)
+3. Baca JWT_SECRET dari environment
+4. Verifikasi token dengan `verify_token()` (kalau invalid/expired, return 401)
+5. Return `AuthUser(claims)` kalau semua OK
 
-Catat: **NO `#[async_trait]` attribute** di Axum 0.8 — trait method sudah async secara native.
+**Catatan:** 
+- NO `#[async_trait]` attribute — trait method di Axum 0.8 sudah async secara native
+- `AuthUser` adalah tuple struct, jadi gunakan dengan pattern destructuring: `AuthUser(claims)`
 
 ---
 
@@ -249,9 +275,34 @@ Axum otomatis panggil `AuthUser::from_request_parts` sebelum handler jalan. Kala
 
 ## Update AppState dan main.rs
 
+### Update Module Declaration
+
+Di `src/main.rs`, tambahkan middleware module:
+
+```rust
+mod models;
+mod dto;
+mod common;
+mod db;
+mod repositories;
+mod services;
+mod handlers;
+mod middleware;  // ← TAMBAH
+```
+
+### Update services/mod.rs Exports
+
+Di `src/services/mod.rs`, export Claims dan verify_token:
+
+```rust
+pub mod auth_service;
+
+pub use auth_service::{AuthService, Claims, verify_token};  // ← TAMBAH Claims, verify_token
+```
+
 ### Update AppState
 
-Di `src/main.rs`, tambahkan field `jwt_secret`:
+Di `src/main.rs`, tambahkan field `jwt_secret` dan update constructor:
 
 ```rust
 #[derive(Clone)]
@@ -302,15 +353,39 @@ match sqlx::migrate!("./migrations")
 let jwt_secret = std::env::var("JWT_SECRET")
     .expect("JWT_SECRET harus di-set di .env");
 
-// Buat AppState dengan semua repositories dan services
+// Setup AppState dengan semua repositories dan services
 let state = AppState::new(pool, jwt_secret);
 ```
 
-Pastikan `.env` kamu sudah punya `JWT_SECRET`:
-
+**PENTING:** Pastikan `.env` file kamu ada JWT_SECRET:
 ```env
 JWT_SECRET=rahasia-yang-panjang-dan-aman-minimal-32-karakter
 ```
+
+Verifikasi dengan:
+```bash
+cargo build
+# Harus 0 errors, 18 warnings (expected)
+```
+
+---
+
+## Kesimpulan Bab 28
+
+**Implementasi JWT & Auth Middleware:**
+- ✅ Claims struct dengan sub, email, role, exp
+- ✅ AuthService::generate_token() - create JWT dengan 7 hari expiry
+- ✅ verify_token() function - validate signature dan expiry
+- ✅ AuthUser custom extractor - otomatis extract dan verify token dari header
+- ✅ Middleware integration - token diperlukan untuk protected endpoints
+
+**JWT Flow:**
+1. **Register/Login** → Generate token dengan `encode()` dan Argon2-hashed password
+2. **Client Request** → Send token di header: `Authorization: Bearer <token>`
+3. **Middleware** → AuthUser extractor verify token, extract Claims
+4. **Handler** → Access claims via `AuthUser(claims)` parameter
+
+**Status Build:** ✅ **0 errors, 18 warnings** (expected)
 
 ---
 

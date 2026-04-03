@@ -208,7 +208,7 @@ Unit test yang baik itu **isolated**: tidak bergantung ke DB, network, atau stat
 
 File ini punya 4 helper function yang bisa di-test tanpa database:
 - `parse_role()` — konversi string "customer"/"agent" → enum UserRole
-- `format_role()` — konversi enum UserRole → string
+- `role_to_string()` — konversi enum UserRole → string
 - `parse_claims_role()` — konversi string dari JWT claim → enum
 - `verify_token()` — verifikasi JWT signature dan expiry
 
@@ -242,11 +242,11 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // Test format_role: cek apakah enum di-convert ke string dengan benar
+    // Test role_to_string: cek apakah enum di-convert ke string dengan benar
     #[test]
-    fn test_format_role_customer() {
+    fn test_role_to_string_customer() {
         let role = UserRole::Customer;
-        assert_eq!(format_role(&role), "customer");
+        assert_eq!(role_to_string(&role), "customer");
     }
 
     // Test parse_claims_role: di-gunakan saat parsing JWT claim
@@ -551,9 +551,11 @@ Boleh ada beberapa `assert!`, tapi fokus pada satu skenario. Kalau test gagal, k
 
 ---
 
-## Hasil Akhir
+## Hasil Akhir: ✅ COMPLETE
 
-Setelah selesai bab ini, kamu sudah menambahkan unit test komprehensif ke tiga modul:
+Status: **25 tests PASSED, 0 failures**
+
+Setelah selesai bab ini, sudah menambahkan unit test komprehensif ke tiga modul:
 
 ### 1. `src/services/auth_service.rs` — 13 tests
 
@@ -577,9 +579,9 @@ mod tests {
     }
 
     #[test]
-    fn test_format_role_customer() {
+    fn test_role_to_string_customer() {
         let role = UserRole::Customer;
-        assert_eq!(format_role(&role), "customer");
+        assert_eq!(role_to_string(&role), "customer");
     }
 
     #[test]
@@ -648,7 +650,7 @@ mod tests {
 ```
 
 **Key points:**
-- `parse_role()` dan `format_role()` adalah private helper function — ditest via `use super::*`
+- `parse_role()` dan `role_to_string()` adalah private helper function — ditest via `use super::*`
 - `verify_token()` adalah public function — ditest langsung
 - Tests untuk token generation menggunakan `encode()` untuk membuat token valid dengan secret tertentu, lalu `verify_token()` memverifikasi dengan secret yang sama/berbeda
 
