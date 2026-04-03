@@ -234,7 +234,7 @@ Ini membuat kode lebih terorganisir. Nanti kita bisa punya `user_routes()`, `aut
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
@@ -245,7 +245,9 @@ use tokio::net::TcpListener;
 struct TicketFilters {
     page: Option<u32>,
     limit: Option<u32>,
+    #[serde(default)]
     status: Option<String>,
+    priority: Option<String>,
 }
 
 async fn health_check() -> &'static str {
@@ -257,7 +259,9 @@ async fn get_tickets(Query(filters): Query<TicketFilters>) -> Json<Value> {
         "success": true,
         "data": [],
         "page": filters.page.unwrap_or(1),
-        "limit": filters.limit.unwrap_or(10)
+        "limit": filters.limit.unwrap_or(10),
+        "status": filters.status,
+        "priority": filters.priority
     }))
 }
 
@@ -276,17 +280,45 @@ async fn create_ticket(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
     })))
 }
 
+async fn delete_ticket(Path(id): Path<u32>) -> StatusCode {
+    println!("Menghapus ticket {}", id);
+    StatusCode::NO_CONTENT
+}
+
 fn ticket_routes() -> Router {
     Router::new()
-        .route("/", get(get_tickets).post(create_ticket))
+        .route("/", get(get_tickets))
+        .route("/", axum::routing::post(create_ticket))
         .route("/{id}", get(get_ticket))
+        .route("/{id}", axum::routing::delete(delete_ticket))
+}
+
+async fn get_users() -> Json<Value> {
+    Json(json!({
+        "success": true,
+        "data": []
+    }))
+}
+
+async fn get_user(Path(id): Path<u32>) -> (StatusCode, Json<Value>) {
+    (StatusCode::OK, Json(json!({
+        "success": true,
+        "data": { "id": id, "name": "Contoh user" }
+    })))
+}
+
+fn user_routes() -> Router {
+    Router::new()
+        .route("/", get(get_users))
+        .route("/{id}", get(get_user))
 }
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
-        .nest("/tickets", ticket_routes());
+        .nest("/tickets", ticket_routes())
+        .nest("/users", user_routes());
 
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Server berjalan di http://localhost:3000");
@@ -336,7 +368,7 @@ Setelah menyelesaikan semua latihan, `src/main.rs` kamu harus terlihat seperti i
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
@@ -347,6 +379,7 @@ use tokio::net::TcpListener;
 struct TicketFilters {
     page: Option<u32>,
     limit: Option<u32>,
+    #[serde(default)]
     status: Option<String>,
     priority: Option<String>,  // dari latihan #2
 }
@@ -361,6 +394,7 @@ async fn get_tickets(Query(filters): Query<TicketFilters>) -> Json<Value> {
         "data": [],
         "page": filters.page.unwrap_or(1),
         "limit": filters.limit.unwrap_or(10),
+        "status": filters.status,
         "priority": filters.priority
     }))
 }
@@ -388,8 +422,10 @@ async fn delete_ticket(Path(id): Path<u32>) -> StatusCode {
 
 fn ticket_routes() -> Router {
     Router::new()
-        .route("/", get(get_tickets).post(create_ticket))
-        .route("/{id}", get(get_ticket).delete(delete_ticket))
+        .route("/", get(get_tickets))
+        .route("/", axum::routing::post(create_ticket))
+        .route("/{id}", get(get_ticket))
+        .route("/{id}", axum::routing::delete(delete_ticket))
 }
 
 // dari latihan #3
@@ -432,12 +468,25 @@ cargo run
 
 # Di terminal lain:
 curl http://localhost:3000/health
-curl "http://localhost:3000/tickets?page=1&limit=5&priority=high"
+# Output: OK
+
+curl "http://localhost:3000/tickets?page=1&limit=5&priority=high&status=open"
+# Output: {"success":true,"data":[],"page":1,"limit":5,"status":"open","priority":"high"}
+
 curl http://localhost:3000/tickets/42
+# Output: {"success":true,"data":{"id":42,"title":"Contoh ticket"}}
+
 curl -X POST http://localhost:3000/tickets -H "Content-Type: application/json" -d '{"title":"Test"}'
+# Output: {"success":true,"message":"Ticket berhasil dibuat"} dengan status 201
+
 curl -X DELETE http://localhost:3000/tickets/42
+# Output: kosong (body) dengan status 204
+
 curl http://localhost:3000/users
+# Output: {"success":true,"data":[]}
+
 curl http://localhost:3000/users/1
+# Output: {"success":true,"data":{"id":1,"name":"Contoh user"}}
 ```
 
 Semuanya harus return 200 atau 204, tidak ada 404 atau error.
