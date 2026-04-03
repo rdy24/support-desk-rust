@@ -68,3 +68,98 @@ pub struct TicketFilters {
     pub status: Option<String>,
     pub priority: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_category_general() {
+        let result = validate_category("general");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_category_billing() {
+        let result = validate_category("billing");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_category_technical() {
+        let result = validate_category("technical");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_category_other() {
+        let result = validate_category("other");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_category_invalid() {
+        let result = validate_category("invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_priority_low() {
+        let result = validate_priority("low");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_priority_medium() {
+        let result = validate_priority("medium");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_priority_high() {
+        let result = validate_priority("high");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_priority_urgent() {
+        let result = validate_priority("urgent");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_priority_invalid() {
+        let result = validate_priority("invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_status_open() {
+        let result = validate_status("open");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_status_in_progress() {
+        let result = validate_status("in_progress");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_status_resolved() {
+        let result = validate_status("resolved");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_status_closed() {
+        let result = validate_status("closed");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_status_invalid() {
+        let result = validate_status("invalid");
+        assert!(result.is_err());
+    }
+}

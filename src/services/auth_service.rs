@@ -156,3 +156,132 @@ pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[test]
+    fn test_parse_role_customer() {
+        let result = parse_role("customer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), UserRole::Customer);
+    }
+
+    #[test]
+    fn test_parse_role_agent() {
+        let result = parse_role("agent");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), UserRole::Agent);
+    }
+
+    #[test]
+    fn test_parse_role_invalid() {
+        let result = parse_role("invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_role_admin_not_allowed() {
+        let result = parse_role("admin");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_format_role_admin() {
+        let role = UserRole::Admin;
+        assert_eq!(format_role(&role), "admin");
+    }
+
+    #[test]
+    fn test_format_role_agent() {
+        let role = UserRole::Agent;
+        assert_eq!(format_role(&role), "agent");
+    }
+
+    #[test]
+    fn test_format_role_customer() {
+        let role = UserRole::Customer;
+        assert_eq!(format_role(&role), "customer");
+    }
+
+    #[test]
+    fn test_parse_claims_role_admin() {
+        let result = parse_claims_role("admin");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), UserRole::Admin);
+    }
+
+    #[test]
+    fn test_parse_claims_role_agent() {
+        let result = parse_claims_role("agent");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), UserRole::Agent);
+    }
+
+    #[test]
+    fn test_parse_claims_role_customer() {
+        let result = parse_claims_role("customer");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), UserRole::Customer);
+    }
+
+    #[test]
+    fn test_parse_claims_role_invalid() {
+        let result = parse_claims_role("invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_token_valid() {
+        let secret = "test-secret-key";
+        let claims = Claims {
+            sub: Uuid::new_v4().to_string(),
+            email: "test@example.com".to_string(),
+            role: "customer".to_string(),
+            exp: 9999999999,
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .unwrap();
+
+        let result = verify_token(&token, secret);
+        assert!(result.is_ok());
+        let decoded = result.unwrap();
+        assert_eq!(decoded.email, "test@example.com");
+        assert_eq!(decoded.role, "customer");
+    }
+
+    #[test]
+    fn test_verify_token_wrong_secret() {
+        let secret = "test-secret-key";
+        let claims = Claims {
+            sub: Uuid::new_v4().to_string(),
+            email: "test@example.com".to_string(),
+            role: "customer".to_string(),
+            exp: 9999999999,
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .unwrap();
+
+        let wrong_secret = "different-secret";
+        let result = verify_token(&token, wrong_secret);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_token_invalid_format() {
+        let result = verify_token("not.a.token", "secret");
+        assert!(result.is_err());
+    }
+}

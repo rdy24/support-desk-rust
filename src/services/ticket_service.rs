@@ -51,7 +51,7 @@ impl TicketService {
             .await?
             .ok_or_else(|| AppError::NotFound("Ticket tidak ditemukan".to_string()))?;
 
-        self.check_access(&ticket, claims)?;
+        check_access(&ticket, claims)?;
         Ok(ticket)
     }
 
@@ -126,7 +126,7 @@ impl TicketService {
             .await?
             .ok_or_else(|| AppError::NotFound("Ticket tidak ditemukan".to_string()))?;
 
-        self.check_access(&ticket, claims)?;
+        check_access(&ticket, claims)?;
 
         // Ambil user_id dari JWT
         let user_id = Uuid::parse_str(&claims.sub)
@@ -150,26 +150,112 @@ impl TicketService {
             .await?
             .ok_or_else(|| AppError::NotFound("Ticket tidak ditemukan".to_string()))?;
 
-        self.check_access(&ticket, claims)?;
+        check_access(&ticket, claims)?;
 
         self.response_repo.find_by_ticket_id(ticket_id).await
     }
 
-    /// Private method: cek apakah user punya akses ke ticket
-    fn check_access(&self, ticket: &Ticket, claims: &Claims) -> Result<(), AppError> {
-        match claims.role.as_str() {
-            "admin" => Ok(()),
-            "agent" => Ok(()),
-            "customer" => {
-                if ticket.customer_id.to_string() == claims.sub {
-                    Ok(())
-                } else {
-                    Err(AppError::Forbidden(
-                        "Kamu tidak punya akses ke ticket ini".to_string(),
-                    ))
-                }
+}
+
+/// Cek apakah user punya akses ke ticket
+fn check_access(ticket: &Ticket, claims: &Claims) -> Result<(), AppError> {
+    match claims.role.as_str() {
+        "admin" => Ok(()),
+        "agent" => Ok(()),
+        "customer" => {
+            if ticket.customer_id.to_string() == claims.sub {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Kamu tidak punya akses ke ticket ini".to_string(),
+                ))
             }
-            _ => Err(AppError::Forbidden("Role tidak dikenal".to_string())),
         }
+        _ => Err(AppError::Forbidden("Role tidak dikenal".to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn make_ticket(customer_id: Uuid) -> Ticket {
+        Ticket {
+            id: Uuid::new_v4(),
+            customer_id,
+            agent_id: None,
+            category: crate::models::TicketCategory::General,
+            priority: crate::models::TicketPriority::Medium,
+            status: crate::models::TicketStatus::Open,
+            subject: "Test ticket".to_string(),
+            description: "Test description".to_string(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_claims(role: &str, id: &str) -> Claims {
+        Claims {
+            sub: id.to_string(),
+            email: "test@example.com".to_string(),
+            role: role.to_string(),
+            exp: 9999999999,
+        }
+    }
+
+    #[test]
+    fn test_check_access_admin_always_allowed() {
+        let customer_id = Uuid::new_v4();
+        let ticket = make_ticket(customer_id);
+        let claims = make_claims("admin", &Uuid::new_v4().to_string());
+
+        let result = check_access(&ticket, &claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_access_agent_always_allowed() {
+        let customer_id = Uuid::new_v4();
+        let ticket = make_ticket(customer_id);
+        let claims = make_claims("agent", &Uuid::new_v4().to_string());
+
+        let result = check_access(&ticket, &claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_access_customer_own_ticket() {
+        let customer_id = Uuid::new_v4();
+        let ticket = make_ticket(customer_id);
+        let claims = make_claims("customer", &customer_id.to_string());
+
+        let result = check_access(&ticket, &claims);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_access_customer_other_ticket() {
+        let customer_id = Uuid::new_v4();
+        let other_customer_id = Uuid::new_v4();
+        let ticket = make_ticket(customer_id);
+        let claims = make_claims("customer", &other_customer_id.to_string());
+
+        let result = check_access(&ticket, &claims);
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Forbidden(_)) => {},
+            _ => panic!("Expected Forbidden error"),
+        }
+    }
+
+    #[test]
+    fn test_check_access_unknown_role() {
+        let customer_id = Uuid::new_v4();
+        let ticket = make_ticket(customer_id);
+        let claims = make_claims("unknown", &Uuid::new_v4().to_string());
+
+        let result = check_access(&ticket, &claims);
+        assert!(result.is_err());
     }
 }
