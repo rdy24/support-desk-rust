@@ -4,19 +4,3 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.8"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "uuid", "chrono", "macros"] }
-jsonwebtoken = "9"
-argon2 = "0.5"
-validator = { version = "0.18", features = ["derive"] }
-thiserror = "2"
-uuid = { version = "1", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
-tower-http = { version = "0.6", features = ["cors"] }
-
-# Semua versi di atas adalah versi saat ebook ini ditulis, Maret 2026
-# Cek https://crates.io untuk versi terbaru
