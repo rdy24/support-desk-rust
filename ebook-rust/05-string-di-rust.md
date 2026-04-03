@@ -20,7 +20,7 @@ Itulah `&str` (dibaca: "string slice" atau "string ref"). Data-nya sudah ada di 
 let username: &str = "budi";
 ```
 
-Teks `"budi"` langsung tersimpan di dalam file program (di bagian yang disebut binary atau stack). Variabel `username` hanya menyimpan "alamat" ke sana.
+Teks `"budi"` disimpan langsung di dalam file program kita (read-only section), tertanam di binary saat kompilasi. Variabel `username` hanya menyimpan "alamat" (pointer) dan panjang string itu, bukan menyimpan string itu sendiri di stack.
 
 ---
 

@@ -59,3 +59,12 @@ fn validate_status(status: &str) -> Result<(), validator::ValidationError> {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TicketFilters {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+    #[serde(default)]
+    pub status: Option<String>,
+    pub priority: Option<String>,
+}

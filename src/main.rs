@@ -8,22 +8,17 @@ mod handlers;
 mod middleware;
 
 use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    routing::{get, post},
+    routing::{get, post, patch},
     Json, Router,
 };
-use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::net::TcpListener;
-use crate::dto::CreateTicketDto;
-use validator::Validate;
 use sqlx::PgPool;
 use db::create_pool;
 use crate::repositories::{
     UserRepository, TicketRepository, ResponseRepository, DashboardRepository,
 };
-use crate::services::AuthService;
+use crate::services::{AuthService, TicketService};
 
 // ============================================
 // AppState — berbagi repositories, services, dan pool ke semua handler
@@ -36,32 +31,27 @@ pub struct AppState {
     pub response_repo: ResponseRepository,
     pub dashboard_repo: DashboardRepository,
     pub auth_service: AuthService,
+    pub ticket_service: TicketService,
     pub jwt_secret: String,
 }
 
 impl AppState {
     pub fn new(pool: PgPool, jwt_secret: String) -> Self {
         let user_repo = UserRepository::new(pool.clone());
+        let ticket_repo = TicketRepository::new(pool.clone());
+        let response_repo = ResponseRepository::new(pool.clone());
 
         Self {
             user_repo: user_repo.clone(),
-            ticket_repo: TicketRepository::new(pool.clone()),
-            response_repo: ResponseRepository::new(pool.clone()),
+            ticket_repo: ticket_repo.clone(),
+            response_repo: response_repo.clone(),
             dashboard_repo: DashboardRepository::new(pool.clone()),
             auth_service: AuthService::new(user_repo, jwt_secret.clone()),
+            ticket_service: TicketService::new(ticket_repo, response_repo),
             jwt_secret,
             db: pool,
         }
     }
-}
-
-#[derive(Deserialize)]
-struct TicketFilters {
-    page: Option<u32>,
-    limit: Option<u32>,
-    #[serde(default)]
-    status: Option<String>,
-    priority: Option<String>,
 }
 
 async fn health_check() -> &'static str {
@@ -79,79 +69,6 @@ async fn get_current_user(
             "role": claims.role
         }
     }))
-}
-
-async fn get_tickets(Query(filters): Query<TicketFilters>) -> Json<Value> {
-    Json(json!({
-        "success": true,
-        "data": [],
-        "page": filters.page.unwrap_or(1),
-        "limit": filters.limit.unwrap_or(10),
-        "status": filters.status,
-        "priority": filters.priority
-    }))
-}
-
-async fn get_ticket(Path(id): Path<u32>) -> (StatusCode, Json<Value>) {
-    (StatusCode::OK, Json(json!({
-        "success": true,
-        "data": { "id": id, "title": "Contoh ticket" }
-    })))
-}
-
-async fn create_ticket(Json(body): Json<CreateTicketDto>) -> (StatusCode, Json<Value>) {
-    // Validasi input sebelum proses
-    if let Err(errors) = body.validate() {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({
-                "success": false,
-                "message": "Validasi gagal",
-                "errors": errors.to_string()
-            })),
-        );
-    }
-
-    // Data sudah bersih, lanjut proses bisnis
-    println!("Ticket baru: subject={}, category={}", body.subject, body.category);
-
-    (StatusCode::CREATED, Json(json!({
-        "success": true,
-        "message": "Ticket berhasil dibuat"
-    })))
-}
-
-async fn delete_ticket(Path(id): Path<u32>) -> StatusCode {
-    println!("Menghapus ticket {}", id);
-    StatusCode::NO_CONTENT
-}
-
-fn ticket_routes() -> Router {
-    Router::new()
-        .route("/", get(get_tickets))
-        .route("/", axum::routing::post(create_ticket))
-        .route("/{id}", get(get_ticket))
-        .route("/{id}", axum::routing::delete(delete_ticket))
-}
-
-async fn get_users() -> Json<Value> {
-    Json(json!({
-        "success": true,
-        "data": []
-    }))
-}
-
-async fn get_user(Path(id): Path<u32>) -> (StatusCode, Json<Value>) {
-    (StatusCode::OK, Json(json!({
-        "success": true,
-        "data": { "id": id, "name": "Contoh user" }
-    })))
-}
-
-fn user_routes() -> Router {
-    Router::new()
-        .route("/", get(get_users))
-        .route("/{id}", get(get_user))
 }
 
 #[tokio::main]
@@ -190,19 +107,24 @@ async fn main() {
     // Buat AppState dengan semua repositories dan services
     let state = AppState::new(pool, jwt_secret);
 
-    // Setup auth routes dengan state
-    let auth_routes = Router::new()
+    // Setup auth dan ticket routes dengan state
+    let stateful_routes = Router::new()
         .route("/auth/register", post(handlers::auth_handler::register))
         .route("/auth/login", post(handlers::auth_handler::login))
         .route("/me", get(get_current_user))
+        .route("/tickets", post(handlers::ticket_handler::create_ticket))
+        .route("/tickets", get(handlers::ticket_handler::get_tickets))
+        .route("/tickets/:id", get(handlers::ticket_handler::get_ticket))
+        .route("/tickets/:id", patch(handlers::ticket_handler::update_ticket))
+        .route("/tickets/:id", axum::routing::delete(handlers::ticket_handler::delete_ticket))
+        .route("/tickets/:id/responses", post(handlers::ticket_handler::add_response))
+        .route("/tickets/:id/responses", get(handlers::ticket_handler::get_responses))
         .with_state(state);
 
     // Setup router dengan semua routes
     let app = Router::new()
         .route("/health", get(health_check))
-        .merge(auth_routes)
-        .nest("/tickets", ticket_routes())
-        .nest("/users", user_routes());
+        .merge(stateful_routes);
 
     // Baca PORT dari environment, default 3000 jika tidak ada
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());

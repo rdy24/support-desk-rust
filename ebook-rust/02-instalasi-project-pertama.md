@@ -123,12 +123,12 @@ Buka file `Cargo.toml`, ini adalah file konfigurasi project. Isinya seperti ini:
 [package]
 name = "support-desk"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 ```
 
-**`[package]`** mendefinisikan identitas project. Seperti KTP-nya project. `name` adalah nama project (sekaligus nama file program yang dihasilkan), `version` mengikuti aturan **semver** (semantic versioning) dengan format major.minor.patch, dan `edition = "2021"` adalah versi "dialek" Rust yang dipakai, edisi 2021 adalah yang terbaru dan paling direkomendasikan.
+**`[package]`** mendefinisikan identitas project. Seperti KTP-nya project. `name` adalah nama project (sekaligus nama file program yang dihasilkan), `version` mengikuti aturan **semver** (semantic versioning) dengan format major.minor.patch, dan `edition = "2024"` adalah versi "dialek" Rust yang dipakai, edisi 2024 adalah yang terbaru dan paling direkomendasikan.
 
 **`[dependencies]`** adalah tempat mendaftarkan library tambahan yang dibutuhkan project. Sekarang masih kosong. Di bab-bab berikutnya, kita akan menambahkan library seperti `axum` untuk web server, `sqlx` untuk database, dan lain-lain. Cukup ditambahkan di bagian ini.
 
