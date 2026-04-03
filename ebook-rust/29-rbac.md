@@ -1,4 +1,4 @@
-# Bab 29: Role-Based Access Control
+# Bab 29: Role-Based Access Control (RBAC)
 
 Bayangkan sebuah gedung kantor besar. Semua karyawan punya kartu akses, tapi nggak semua kartu bisa buka semua pintu. Security guard bisa masuk lobi dan ruang kontrol. Kasir bisa masuk kasir dan gudang kecil. Manager bisa masuk hampir semua ruangan. CEO bisa buka semua pintu, termasuk ruang server.
 
@@ -21,104 +21,81 @@ Di Rust dengan Axum, pendekatannya berbeda. Karena Rust adalah bahasa yang *type
 ## Kunci Jawaban & State Sebelumnya
 
 **Kunci Jawaban Latihan Bab 28:**
-- JWT middleware dengan token verification sudah di `src/middleware/` dari "Hasil Akhir Bab 28"
+- JWT middleware dengan token verification sudah di `src/middleware/auth.rs` dari "Hasil Akhir Bab 28"
 - Claims ekstraction dari token sudah lengkap
+- `AuthUser` extractor siap untuk dikomposisi
 
 **State Sebelumnya:**
 Dari Bab 28, middleware JWT sudah bisa extract & verify token. Sekarang Bab 29 tambah custom extractor untuk role checking.
 
 ---
 
-## Role Enum di Rust
+## UserRole Enum: Siap untuk Perbandingan
 
-Pertama, definisikan role sebagai enum. Enum di Rust bukan sekadar konstanta; ini tipe data tersendiri yang compiler bisa validasi.
+Di Bab 24 kita sudah definisikan `UserRole` enum untuk database. Sekarang kita tambahkan trait `PartialEq` supaya bisa bandingkan role dengan `==` dan `!=`:
 
 ```rust
-// src/models/user.rs
+// src/models/enums.rs
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
-pub enum Role {
+pub enum UserRole {
     Admin,
     Agent,
     Customer,
 }
 ```
 
-`#[derive(PartialEq)]` memungkinkan kita bandingkan role pakai `==`. `sqlx::Type` adalah derive macro dari library SQLx yang membuat enum ini bisa langsung dibaca dari kolom PostgreSQL. `#[sqlx(type_name = "user_role", rename_all = "lowercase")]` memberitahu SQLx bahwa tipe di PostgreSQL namanya `user_role` dengan value lowercase (`admin`, `agent`, `customer`).
-
-Di database migration-nya (dari Bab 24), kita sudah punya:
-
-```sql
-CREATE TYPE user_role AS ENUM ('admin', 'agent', 'customer');
-```
-
-Dengan derive ini, SQLx bisa otomatis konversi antara `Role::Admin` di Rust dan `"admin"` di PostgreSQL.
+`#[derive(PartialEq)]` ini membuat kita bisa bandingkan dua nilai `UserRole` dengan operator `!=` dan `==`. Contoh: `claims.role != UserRole::Admin`.
 
 ---
 
-## Update Claims untuk Pakai Role Enum
+## Claims Masih Pakai String (Kenapa?)
 
-Di Bab 28 kita sudah bikin JWT dengan `Claims`. Update struct-nya supaya pakai `Role` enum, bukan `String`.
+Di Bab 28, Claims disimpan dengan `role: String`. Kenapa nggak langsung `role: UserRole`?
 
-```rust
-// src/auth/jwt.rs
+JWT adalah standard format untuk serialize data ke JSON dan back. Waktu kita encode Claims ke token, semua field harus bisa di-serialize jadi string. Kalau kita pakai `UserRole` enum langsung, serde akan serialize jadi `"Admin"` (CamelCase), tapi database kita pakai lowercase `"admin"`. Berantakan.
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Claims {
-    pub sub: String,       // user ID
-    pub role: Role,        // pakai Role enum, bukan String
-    pub exp: usize,
-}
-```
-
-Bedanya di sini: kalau pakai String, kita bisa salah ketik: `"Admin"` vs `"admin"` vs `"ADMIN"` semuanya berbeda tapi nggak ada yang error saat compile. Dengan enum, kalau salah ketik, Rust langsung error saat compile. Pastikan `Role` implement `Serialize` dan `Deserialize` (sudah kita derive di atas) supaya bisa dimasukkan ke JWT payload.
-
----
-
-## Custom Extractor: AdminOnly dan AdminOrAgent
-
-Di Axum, **extractor** adalah struct yang implement trait `FromRequestParts`. Setiap kali handler dipanggil, Axum otomatis menjalankan semua extractor yang ada di parameter handler. Kalau salah satu gagal, request ditolak dengan error yang kita definisikan.
+Solusinya: simpan di Claims sebagai String (cocok dengan format JWT), trus convert ke UserRole enum waktu kita mau cek role di extractor. Kita pakai helper `parse_claims_role()`:
 
 ```rust
-// src/auth/extractors.rs
+// src/services/auth_service.rs
 
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
-use crate::{auth::jwt::Claims, errors::AppError};
-
-// Wrapper untuk Claims setelah auth berhasil (any role)
-pub struct AuthUser(pub Claims);
-
-// Hanya admin
-pub struct AdminOnly(pub Claims);
-
-// Admin atau agent
-pub struct AdminOrAgent(pub Claims);
-```
-
-Implementasi `AuthUser` (dari Bab 28, verifikasi JWT saja):
-
-```rust
-#[async_trait]
-impl<S> FromRequestParts<S> for AuthUser
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Ambil token dari header Authorization
-        // Verifikasi dan decode JWT
-        // Return AuthUser(claims) kalau valid
-        // ...
+/// Helper: Konversi string role dari JWT claims ke enum UserRole
+pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
+    match role {
+        "admin" => Ok(UserRole::Admin),
+        "agent" => Ok(UserRole::Agent),
+        "customer" => Ok(UserRole::Customer),
+        _ => Err(AppError::Internal(
+            "Invalid role in JWT claims".to_string(),
+        )),
     }
 }
 ```
 
-`AdminOnly` meng-compose dari `AuthUser`, lalu tambah pengecekan role:
+Dengan cara ini, JWT tetap simple (role sebagai string lowercase), tapi di Rust code kita punya type-safe enum untuk perbandingan.
+
+---
+
+## Custom Extractor: Komposisi Role Guard
+
+Di Axum, **extractor** adalah struct yang implement trait `FromRequestParts`. Setiap kali handler dipanggil, Axum otomatis menjalankan semua extractor yang ada di parameter handler. Kalau salah satu gagal, request ditolak dengan error yang kita definisikan.
+
+Trick penting: kita bisa **compose** satu extractor di dalam extractor lain. Caranya: panggil `from_request_parts` dari extractor lain di dalam implementasi kita.
+
+Contoh `AdminOnly`:
 
 ```rust
-#[async_trait]
+// src/middleware/auth.rs
+
+use crate::models::UserRole;
+use crate::services::parse_claims_role;
+
+/// Custom extractor untuk admin users saja
+pub struct AdminOnly(pub Claims);
+
 impl<S> FromRequestParts<S> for AdminOnly
 where
     S: Send + Sync,
@@ -126,11 +103,14 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        // Pertama, pastikan user sudah login
+        // Langkah 1: Pastikan user sudah login (compose AuthUser)
         let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
 
-        // Lalu cek role-nya
-        if claims.role != Role::Admin {
+        // Langkah 2: Konversi string role ke enum
+        let role = parse_claims_role(&claims.role)?;
+
+        // Langkah 3: Cek apakah role adalah Admin
+        if role != UserRole::Admin {
             return Err(AppError::Forbidden(
                 "Hanya admin yang boleh akses endpoint ini".to_string(),
             ));
@@ -141,10 +121,20 @@ where
 }
 ```
 
-Dan `AdminOrAgent`:
+Pola penting: `let AuthUser(claims) = AuthUser::from_request_parts(...).await?` adalah **destructuring**. Kita langsung ambil `claims` dari dalam struct `AuthUser`. Tanda `?` berarti kalau `AuthUser` gagal (JWT invalid), error langsung di-propagate ke atas.
+
+---
+
+## Extractor: AdminOrAgent
+
+Beberapa endpoint boleh diakses oleh admin *atau* agent. Kita pakai `AdminOrAgent`:
 
 ```rust
-#[async_trait]
+// src/middleware/auth.rs
+
+/// Custom extractor untuk admin atau agent
+pub struct AdminOrAgent(pub Claims);
+
 impl<S> FromRequestParts<S> for AdminOrAgent
 where
     S: Send + Sync,
@@ -153,8 +143,9 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
+        let role = parse_claims_role(&claims.role)?;
 
-        if claims.role != Role::Admin && claims.role != Role::Agent {
+        if role != UserRole::Admin && role != UserRole::Agent {
             return Err(AppError::Forbidden(
                 "Endpoint ini hanya untuk admin atau agent".to_string(),
             ));
@@ -165,26 +156,35 @@ where
 }
 ```
 
-Pola `let AuthUser(claims) = AuthUser::from_request_parts(...).await?` adalah **destructuring**, yaitu kita langsung ambil `claims` dari dalam struct `AuthUser`. Tanda `?` artinya kalau `AuthUser` gagal (JWT invalid), error langsung di-propagate ke atas.
+---
 
-`AppError::Forbidden` perlu kita tambahkan ke enum error kita (Bab 22), dengan HTTP status 403:
+## Extractor: CustomerOnly
+
+Customer register sendiri, jadi ada endpoint yang hanya customer yang bisa akses:
 
 ```rust
-// src/errors.rs
+// src/middleware/auth.rs
 
-pub enum AppError {
-    // ... error lain
-    Forbidden(String),
-}
+/// Custom extractor untuk customer users saja
+pub struct CustomerOnly(pub Claims);
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        match self {
-            // ...
-            AppError::Forbidden(msg) => {
-                (StatusCode::FORBIDDEN, Json(json!({ "error": msg }))).into_response()
-            }
+impl<S> FromRequestParts<S> for CustomerOnly
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
+        let role = parse_claims_role(&claims.role)?;
+
+        if role != UserRole::Customer {
+            return Err(AppError::Forbidden(
+                "Hanya customer yang boleh akses endpoint ini".to_string(),
+            ));
         }
+
+        Ok(CustomerOnly(claims))
     }
 }
 ```
@@ -193,40 +193,37 @@ impl IntoResponse for AppError {
 
 ## Memakai Role Guard di Handler
 
-Tinggal pakai extractor sebagai parameter handler. Axum otomatis tahu urutan ekstraksinya.
+Dari Bab 27-28, kita tahu handler di project ini mengikuti pattern:
+- Extract `State(state): State<AppState>` untuk akses database
+- Extract `Json(dto): Json<DTO>` untuk validasi input
+- Return `Result<Json<Value>, AppError>` — Axum otomatis convert error ke HTTP response
+
+Sekarang tambahkan extractor role (misalnya `AdminOnly(claims): AdminOnly`) sebagai parameter handler juga. Axum panggil secara otomatis sebelum handler body dijalankan. Kalau role nggak match, extractor langsung throw error dan handler nggak pernah dijalankan.
+
+Contoh paling simple: endpoint `/me` yang return info user yang login:
 
 ```rust
-// src/handlers/user_handler.rs
+// src/main.rs
 
-// Hanya admin yang bisa lihat semua user
-pub async fn list_all_users(
-    State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
-    Query(filters): Query<UserFilters>,
-) -> AppResult<impl IntoResponse> {
-    let users = state.user_service.find_all(filters).await?;
-    Ok(Json(users))
+async fn get_current_user(
+    crate::middleware::AuthUser(claims): crate::middleware::AuthUser,
+) -> Json<serde_json::Value> {
+    Json(json!({
+        "success": true,
+        "data": {
+            "id": claims.sub,
+            "email": claims.email,
+            "role": claims.role
+        }
+    }))
 }
 
-// Admin dan agent bisa lihat semua tiket
-pub async fn list_tickets(
-    State(state): State<AppState>,
-    AdminOrAgent(claims): AdminOrAgent,
-) -> AppResult<impl IntoResponse> {
-    let tickets = state.ticket_service.find_all().await?;
-    Ok(Json(tickets))
-}
-
-// Customer buat tiket baru
-pub async fn create_ticket(
-    State(state): State<AppState>,
-    AuthUser(claims): AuthUser,  // any authenticated user
-    Json(body): Json<CreateTicketDto>,
-) -> AppResult<impl IntoResponse> {
-    // Validasi role customer di service layer jika perlu
-    let ticket = state.ticket_service.create(claims.sub, body).await?;
-    Ok((StatusCode::CREATED, Json(ticket)))
-}
+// Di router setup:
+let auth_routes = Router::new()
+    .route("/auth/register", post(handlers::auth_handler::register))
+    .route("/auth/login", post(handlers::auth_handler::login))
+    .route("/me", get(get_current_user))
+    .with_state(state);
 ```
 
 Kalau handler punya `AdminOnly(claims): AdminOnly` di parameter-nya, Rust *tidak akan compile* kalau kamu lupa pasang extractor itu. Ini jaminan dari type system Rust, bukan dari runtime check yang bisa kelewat.
@@ -235,49 +232,304 @@ Kalau handler punya `AdminOnly(claims): AdminOnly` di parameter-nya, Rust *tidak
 
 ## Tabel Mapping Endpoint ke Role
 
-Berikut pemetaan endpoint di project support desk kita:
+Berikut pemetaan endpoint di project support desk kita (untuk reference chapter berikutnya):
 
 | Endpoint | Method | Role yang Diizinkan |
 |---|---|---|
-| `/users` | GET | Admin only |
-| `/users/{id}` | GET | Admin only |
-| `/agents` | GET | Admin only |
-| `/customers` | GET | Admin only |
-| `/tickets` | GET | Admin, Agent (filtering per role di service) |
-| `/tickets` | POST | Customer only |
-| `/tickets/{id}` | PATCH | Admin, Agent |
-| `/tickets/{id}` | GET | Admin, Agent, Customer (sesuai ownership) |
-| `/dashboard/stats` | GET | Admin, Agent |
+| `/auth/register` | POST | Public (any) |
+| `/auth/login` | POST | Public (any) |
+| `/me` | GET | AuthUser (any authenticated) |
+| `/users` | GET | AdminOnly |
+| `/users/{id}` | GET | AdminOnly |
+| `/tickets` | GET | AdminOrAgent (dengan filtering di service) |
+| `/tickets` | POST | CustomerOnly |
+| `/tickets/{id}` | GET | AuthUser (dengan filtering di service) |
+| `/tickets/{id}` | PATCH | AdminOrAgent |
+| `/dashboard/stats` | GET | AdminOrAgent |
 
-Untuk endpoint `/tickets GET`, filtering tambahan dilakukan di service layer. Admin dan Agent lihat semua tiket, sedangkan Customer hanya lihat tiket mereka sendiri. Ini bukan soal akses endpoint, tapi soal filter data.
+Untuk endpoint yang punya tanda **(dengan filtering di service)**, extractor hanya jadi gate pertama. Logic filter data lebih lanjut dilakukan di service layer — misalnya, customer hanya lihat tiket mereka sendiri, tapi endpoint tetap dibuka untuk mereka.
 
-[ILUSTRASI: Tabel di atas divisualisasikan sebagai pintu-pintu dengan warna berbeda: merah (admin only), kuning (admin+agent), hijau (semua user login), abu-abu (logic di service layer)]
+[ILUSTRASI: Tabel divisualisasikan sebagai pintu-pintu dengan warna berbeda: merah (AdminOnly), kuning (AdminOrAgent), hijau (AuthUser), abu-abu (public). Setiap pintu menunjukkan HTTP method.]
 
 ---
 
 ## Latihan
 
-**Latihan 1: Tambah extractor `CustomerOnly`**
+**Latihan 1: Test endpoint `/me`**
 
-Buat extractor `CustomerOnly` mengikuti pola `AdminOnly`. Handler `create_ticket` seharusnya hanya bisa dipanggil oleh customer, bukan admin atau agent.
+Jalankan server, trus coba akses:
 
-```rust
-pub struct CustomerOnly(pub Claims);
+```bash
+# Daftar customer baru
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Budi", "email": "budi@test.com", "password": "password123", "role": "customer"}'
 
-// Implement FromRequestParts untuk CustomerOnly
-// Hint: cek claims.role != Role::Customer
+# Ambil token dari response
+TOKEN="..."
+
+# Akses /me dengan token
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/me
+
+# Coba tanpa token — should 401
+curl http://localhost:3000/me
 ```
 
-**Latihan 2: Coba akses tanpa token**
+Apa yang kamu lihat?
 
-Jalankan server, lalu coba akses `GET /users` tanpa header `Authorization`. Apa error yang muncul? Apa HTTP status code-nya?
+**Latihan 2: Coba akses dengan token customer ke endpoint AdminOnly**
 
-Sekarang coba dengan token customer yang valid. Apa yang berbeda?
+Buat handler sederhana yang pakai `AdminOnly` extractor (misalnya `GET /admin-test`). Trus:
 
-**Latihan 3: Role-based filtering di service**
+```bash
+# Dengan token customer
+curl -H "Authorization: Bearer $CUSTOMER_TOKEN" http://localhost:3000/admin-test
+# Harusnya 403 Forbidden
 
-Untuk endpoint `GET /tickets`, sekarang admin lihat semua tiket. Ubah service layer supaya kalau `claims.role == Role::Customer`, hanya kembalikan tiket milik `claims.sub`, sedangkan kalau `claims.role == Role::Admin` atau `Role::Agent`, kembalikan semua tiket. Handler tetap pakai `AuthUser`, tapi service yang memfilter berdasarkan role.
+# Dengan token admin (coba create user dengan role admin di database langsung)
+# atau lihat di testing: admin user dibuat waktu migration
+```
+
+Apa error yang muncul? Apa HTTP status code-nya?
+
+**Latihan 3: Tambah `AgentOnly` extractor**
+
+Ikuti pola `AdminOnly`, bikin extractor baru `AgentOnly` yang hanya accept `UserRole::Agent`. Kalau role bukan agent, return Forbidden error.
+
+Hint:
+```rust
+pub struct AgentOnly(pub Claims);
+// implement FromRequestParts sama seperti AdminOnly, tapi cek role != UserRole::Agent
+```
 
 ---
 
-Di bab berikutnya kita akan membahas bagaimana melindungi route di level router, sehingga kita bisa groupkan endpoint berdasarkan role sebelum sampai ke handler.
+## Hasil Akhir
+
+Berikut adalah kode lengkap untuk Bab 29. Bandingkan dengan project mu untuk memastikan step-by-step di atas tercermin dengan benar.
+
+### Step 1: `src/models/enums.rs` — Tambah PartialEq
+
+```rust
+use sqlx::Type;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Type)]
+#[sqlx(type_name = "user_role", rename_all = "lowercase")]
+pub enum UserRole {
+    Admin,
+    Agent,
+    Customer,
+}
+
+// ... enum lain tetap sama
+```
+
+**Apa yang berubah:**
+- Tambah `PartialEq` ke derive list supaya bisa perbandingan `==` dan `!=`
+
+---
+
+### Step 2: `src/services/auth_service.rs` — Tambah parse_claims_role()
+
+Tambahkan function baru di akhir file (setelah `verify_token()`):
+
+```rust
+/// Helper: Konversi string role dari JWT claims ke enum UserRole
+pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
+    match role {
+        "admin" => Ok(UserRole::Admin),
+        "agent" => Ok(UserRole::Agent),
+        "customer" => Ok(UserRole::Customer),
+        _ => Err(AppError::Internal(
+            "Invalid role in JWT claims".to_string(),
+        )),
+    }
+}
+```
+
+---
+
+### Step 3: `src/services/mod.rs` — Re-export parse_claims_role
+
+```rust
+pub mod auth_service;
+
+pub use auth_service::{AuthService, Claims, verify_token, parse_claims_role};
+```
+
+---
+
+### Step 4: `src/middleware/auth.rs` — Tambah 3 Extractor Baru
+
+```rust
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use crate::common::AppError;
+use crate::services::{Claims, verify_token, parse_claims_role};
+use crate::models::UserRole;
+
+/// Custom extractor untuk authenticated users (any role)
+pub struct AuthUser(pub Claims);
+
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let auth_header = parts
+            .headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AppError::Unauthorized("Token diperlukan".to_string()))?;
+
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| {
+                AppError::Unauthorized("Format token salah, gunakan: Bearer <token>".to_string())
+            })?;
+
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .map_err(|_| AppError::Internal("JWT_SECRET tidak dikonfigurasi".to_string()))?;
+
+        let claims = verify_token(token, &jwt_secret)?;
+        Ok(AuthUser(claims))
+    }
+}
+
+/// Custom extractor untuk admin users saja
+pub struct AdminOnly(pub Claims);
+
+impl<S> FromRequestParts<S> for AdminOnly
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
+        let role = parse_claims_role(&claims.role)?;
+
+        if role != UserRole::Admin {
+            return Err(AppError::Forbidden(
+                "Hanya admin yang boleh akses endpoint ini".to_string(),
+            ));
+        }
+
+        Ok(AdminOnly(claims))
+    }
+}
+
+/// Custom extractor untuk admin atau agent
+pub struct AdminOrAgent(pub Claims);
+
+impl<S> FromRequestParts<S> for AdminOrAgent
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
+        let role = parse_claims_role(&claims.role)?;
+
+        if role != UserRole::Admin && role != UserRole::Agent {
+            return Err(AppError::Forbidden(
+                "Endpoint ini hanya untuk admin atau agent".to_string(),
+            ));
+        }
+
+        Ok(AdminOrAgent(claims))
+    }
+}
+
+/// Custom extractor untuk customer users saja
+pub struct CustomerOnly(pub Claims);
+
+impl<S> FromRequestParts<S> for CustomerOnly
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthUser(claims) = AuthUser::from_request_parts(parts, state).await?;
+        let role = parse_claims_role(&claims.role)?;
+
+        if role != UserRole::Customer {
+            return Err(AppError::Forbidden(
+                "Hanya customer yang boleh akses endpoint ini".to_string(),
+            ));
+        }
+
+        Ok(CustomerOnly(claims))
+    }
+}
+```
+
+---
+
+### Step 5: `src/middleware/mod.rs` — Update Re-exports
+
+```rust
+pub mod auth;
+
+pub use auth::{AuthUser, AdminOnly, AdminOrAgent, CustomerOnly};
+```
+
+---
+
+### Step 6: `src/main.rs` — Tambah test endpoint `/me`
+
+Tambahkan function handler:
+
+```rust
+async fn get_current_user(
+    crate::middleware::AuthUser(claims): crate::middleware::AuthUser,
+) -> Json<serde_json::Value> {
+    Json(json!({
+        "success": true,
+        "data": {
+            "id": claims.sub,
+            "email": claims.email,
+            "role": claims.role
+        }
+    }))
+}
+```
+
+Dan tambahkan route ke `auth_routes`:
+
+```rust
+// Setup auth routes dengan state
+let auth_routes = Router::new()
+    .route("/auth/register", post(handlers::auth_handler::register))
+    .route("/auth/login", post(handlers::auth_handler::login))
+    .route("/me", get(get_current_user))
+    .with_state(state);
+```
+
+---
+
+## Verifikasi
+
+```bash
+# Build harus 0 error
+cargo build
+
+# Jalankan server
+cargo run
+
+# Test di terminal lain
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test", "email": "test@example.com", "password": "password123", "role": "customer"}'
+
+# Ambil token dari response, trus:
+curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/me
+```
+
+Harusnya kelihat info user (id, email, role) dengan status 200.

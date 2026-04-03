@@ -1,7 +1,7 @@
 use sqlx::Type;
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[derive(Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {

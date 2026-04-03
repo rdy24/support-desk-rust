@@ -144,3 +144,15 @@ pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AppError> {
     .map(|data| data.claims)
     .map_err(|_| AppError::Unauthorized("Token tidak valid atau expired".to_string()))
 }
+
+/// Helper: Konversi string role dari JWT claims ke enum UserRole
+pub fn parse_claims_role(role: &str) -> Result<UserRole, AppError> {
+    match role {
+        "admin" => Ok(UserRole::Admin),
+        "agent" => Ok(UserRole::Agent),
+        "customer" => Ok(UserRole::Customer),
+        _ => Err(AppError::Internal(
+            "Invalid role in JWT claims".to_string(),
+        )),
+    }
+}

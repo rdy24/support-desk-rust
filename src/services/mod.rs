@@ -1,3 +1,3 @@
 pub mod auth_service;
 
-pub use auth_service::{AuthService, Claims, verify_token};
+pub use auth_service::{AuthService, Claims, verify_token, parse_claims_role};

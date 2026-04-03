@@ -68,6 +68,19 @@ async fn health_check() -> &'static str {
     "OK"
 }
 
+async fn get_current_user(
+    crate::middleware::AuthUser(claims): crate::middleware::AuthUser,
+) -> Json<serde_json::Value> {
+    Json(json!({
+        "success": true,
+        "data": {
+            "id": claims.sub,
+            "email": claims.email,
+            "role": claims.role
+        }
+    }))
+}
+
 async fn get_tickets(Query(filters): Query<TicketFilters>) -> Json<Value> {
     Json(json!({
         "success": true,
@@ -181,6 +194,7 @@ async fn main() {
     let auth_routes = Router::new()
         .route("/auth/register", post(handlers::auth_handler::register))
         .route("/auth/login", post(handlers::auth_handler::login))
+        .route("/me", get(get_current_user))
         .with_state(state);
 
     // Setup router dengan semua routes
