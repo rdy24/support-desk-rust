@@ -9,10 +9,10 @@ mod middleware;
 
 use axum::{
     routing::{get, post, patch},
-    Json, Router,
+    Router,
 };
-use serde_json::json;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 use sqlx::PgPool;
 use db::create_pool;
 use crate::repositories::{
@@ -61,19 +61,6 @@ impl AppState {
 
 async fn health_check() -> &'static str {
     "OK"
-}
-
-async fn get_current_user(
-    crate::middleware::AuthUser(claims): crate::middleware::AuthUser,
-) -> Json<serde_json::Value> {
-    Json(json!({
-        "success": true,
-        "data": {
-            "id": claims.sub,
-            "email": claims.email,
-            "role": claims.role
-        }
-    }))
 }
 
 #[tokio::main]
@@ -137,10 +124,14 @@ async fn main() {
         .route("/dashboard/stats", get(handlers::dashboard_handler::get_stats))
         .with_state(state);
 
+    // Setup CORS layer
+    let cors = CorsLayer::permissive();
+
     // Setup router dengan semua routes
     let app = Router::new()
         .route("/health", get(health_check))
-        .merge(stateful_routes);
+        .merge(stateful_routes)
+        .layer(cors);
 
     // Baca PORT dari environment, default 3000 jika tidak ada
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
