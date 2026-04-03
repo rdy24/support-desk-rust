@@ -168,7 +168,11 @@ Docker dipakai supaya tidak perlu install PostgreSQL langsung di mesin. Database
 
 **Docker Compose** adalah cara terbaik untuk mengelola database di project. Konfigurasi container ditulis di file `docker-compose.yml` di root project. Jalankan satu perintah, semua container langsung siap. Tim lain tinggal clone repo dan jalankan hal yang sama.
 
-Buat file `docker-compose.yml` di root project:
+### Langkah 1: Buat file `docker-compose.yml`
+
+**Lokasi:** Buat file baru bernama `docker-compose.yml` di **root folder project** (sama level dengan `Cargo.toml`)
+
+**Isi file:**
 
 ```yaml
 services:
@@ -267,7 +271,11 @@ docker compose logs postgres     # Lihat logs database
 
 File `.env` menyimpan konfigurasi sensitif: URL database, secret JWT, dan lain-lain. File ini disimpan di direktori project tapi tidak boleh masuk ke Git.
 
-Buat file `.env` di root project:
+### Langkah 2: Buat file `.env`
+
+**Lokasi:** Buat file baru bernama `.env` di **root folder project** (sama level dengan `Cargo.toml` dan `docker-compose.yml`)
+
+**Isi file:**
 
 ```
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/support_desk
@@ -294,7 +302,13 @@ Pastikan `.gitignore` sudah berisi:
 .env.*.local
 ```
 
-Buat juga `.env.example` yang berisi template tanpa nilai asli, supaya developer lain tahu apa yang perlu diisi:
+### Langkah 3: Buat file `.env.example`
+
+**Lokasi:** Buat file baru bernama `.env.example` di **root folder project**
+
+**Isi file:**
+
+File `.env.example` adalah template yang aman untuk di-commit. Tidak berisi nilai asli, hanya placeholder:
 
 ```
 DATABASE_URL=postgres://user:password@localhost:5432/dbname
@@ -308,12 +322,9 @@ File `.env.example` aman untuk di-commit karena tidak ada nilai sensitif.
 
 ## Membaca Environment Variable
 
-Untuk membaca file `.env` di Rust, pakai library `dotenvy`. Tambahkan ke `Cargo.toml`:
+Untuk membaca file `.env` di Rust, pakai library `dotenvy`. 
 
-```toml
-[dependencies]
-dotenvy = "0.15"
-```
+**Good news:** Dependency `dotenvy` sudah di-include di `Cargo.toml` dari Bab 18, jadi tidak perlu tambah lagi.
 
 Cara pakainya di `main.rs`:
 
@@ -337,14 +348,13 @@ Membuka koneksi baru ke database setiap request itu mahal, karena butuh waktu un
 
 [ILUSTRASI: Pool berisi 10 "koneksi" yang tersedia. Request 1, 2, 3 masing-masing mengambil satu koneksi dari pool, memakainya, lalu mengembalikannya]
 
-Tambahkan dependensi SQLx di `Cargo.toml`:
+### Langkah 4: Buat file `src/db.rs`
 
-```toml
-[dependencies]
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono"] }
-```
+**Good news:** Dependency SQLx sudah di-include di `Cargo.toml` dari Bab 18, jadi tidak perlu tambah lagi.
 
-Buat fungsi untuk inisialisasi pool. Buat file baru `src/db.rs`:
+**Lokasi:** Buat file baru bernama `db.rs` di folder `src/` (sama level dengan `main.rs`)
+
+**Isi file:**
 
 ```rust
 use sqlx::PgPool;
@@ -368,9 +378,6 @@ pub async fn create_pool(database_url: &str) -> PgPool {
 Axum punya mekanisme bernama **State** untuk berbagi data ke semua handler. Buat struct `AppState` yang menyimpan pool:
 
 ```rust
-use axum::extract::State;
-use sqlx::PgPool;
-
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
@@ -383,52 +390,86 @@ pub struct AppState {
 
 ## Kode main.rs yang Diperbarui
 
-Satukan semua bagian:
+### Langkah 5: Update `src/main.rs`
+
+**File yang diupdate:** `src/main.rs` (file dari Bab 22)
+
+**Yang ditambah:**
+
+1. Tambahkan module import di **paling atas** file:
 
 ```rust
 mod db;
+```
 
-use axum::Router;
+2. Tambahkan imports baru:
+
+```rust
+use sqlx::PgPool;
 use db::create_pool;
+```
 
+3. Tambahkan struct `AppState` sebelum `TicketFilters` struct:
+
+```rust
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+}
+```
+
+4. Update `src/main.rs` — Ganti bagian `async fn main()` dengan kode di bawah:
+
+**Lokasi:** Update fungsi `main()` di `src/main.rs` (ganti seluruh fungsi `main`)
+
+**Kode baru:**
+
+```rust
 #[tokio::main]
 async fn main() {
+    // Load .env file
     dotenvy::dotenv().ok();
 
+    // Baca DATABASE_URL dari environment (.env file atau system env var)
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL harus di-set di .env");
 
+    // Buat connection pool ke database
     let pool = create_pool(&database_url).await;
 
-    let state = AppState { db: pool };
+    // Verifikasi koneksi berhasil dengan test query
+    match sqlx::query("SELECT 1").execute(&pool).await {
+        Ok(_) => println!("✓ Database connected successfully"),
+        Err(e) => eprintln!("✗ Database connection failed: {}", e),
+    }
 
+    // Setup router dengan semua routes
     let app = Router::new()
-        // ... tambahkan routes di sini
-        .with_state(state);
+        .route("/health", get(health_check))
+        .nest("/tickets", ticket_routes())
+        .nest("/users", user_routes());
 
+    // Baca PORT dari environment, default 3000 jika tidak ada
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
+    let listener = TcpListener::bind(&addr).await.unwrap();
     println!("Server berjalan di http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 ```
 
-Di handler, pakai `State` extractor untuk mengakses pool:
+**Penjelasan:**
 
-```rust
-use axum::{extract::State, response::IntoResponse, Json};
+| Kode | Artinya |
+|------|---------|
+| `dotenvy::dotenv().ok()` | Load file `.env` ke environment |
+| `std::env::var("DATABASE_URL")` | Baca DATABASE_URL dari environment |
+| `create_pool(&database_url).await` | Buat connection pool ke database (operasi async) |
+| `sqlx::query("SELECT 1").execute(&pool)` | Test koneksi dengan query sederhana |
+| `std::env::var("PORT").unwrap_or_else(...)` | Baca PORT dari env, default "3000" jika tidak ada |
 
-async fn get_tickets(State(state): State<AppState>) -> impl IntoResponse {
-    // pakai state.db untuk query
-    // contoh: sqlx::query_as!(Ticket, "SELECT * FROM tickets")
-    //     .fetch_all(&state.db)
-    //     .await
-}
-```
-
-Pola `State(state): State<AppState>` artinya: "ambil state dari Axum, destructure menjadi variabel `state` bertipe `AppState`".
+**Catatan:** Struct `AppState` didefinisikan di awal file tapi belum dipakai. Ini akan dipakai di Bab 24+ ketika handler perlu mengakses pool secara langsung melalui `State` extractor Axum.
 
 ---
 
@@ -499,58 +540,29 @@ pub async fn create_pool(database_url: &str) -> PgPool {
 }
 ```
 
-**Update File: `src/main.rs`** — Tambahkan di awal:
-```rust
-mod common;
-mod db;
-mod dto;
-mod models;
+**Perubahan di `src/main.rs`:**
 
-use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    routing::{delete, get, post},
-    Json, Router,
-};
-use serde::Deserialize;
-use serde_json::{json, Value};
-use sqlx::PgPool;
-use tokio::net::TcpListener;
+1. **Tambah import di paling atas (setelah mod declarations):**
+   ```rust
+   mod db;
+   use sqlx::PgPool;
+   use db::create_pool;
+   ```
 
-use db::create_pool;
+2. **Tambah struct AppState (sebelum TicketFilters struct):**
+   ```rust
+   #[derive(Clone)]
+   pub struct AppState {
+       pub db: PgPool,
+   }
+   ```
 
-#[derive(Clone)]
-pub struct AppState {
-    pub db: PgPool,
-}
-
-// ... rest of handlers tetap sama dari Bab 19-22
-
-#[tokio::main]
-async fn main() {
-    dotenvy::dotenv().ok();
-
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL harus di-set di .env");
-
-    let pool = create_pool(&database_url).await;
-
-    let state = AppState { db: pool };
-
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .nest("/tickets", ticket_routes())
-        .nest("/users", user_routes())
-        .with_state(state);
-
-    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
-    let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
-
-    println!("Server berjalan di http://{}", addr);
-    axum::serve(listener, app).await.unwrap();
-}
-```
+3. **Ganti seluruh fungsi `async fn main()`** dengan kode di Langkah 5 di atas — yang penting:
+   - Load `.env` dengan `dotenvy::dotenv().ok()`
+   - Baca `DATABASE_URL` dari environment
+   - Buat pool dengan `create_pool(&database_url).await`
+   - Test koneksi dengan `sqlx::query("SELECT 1")`
+   - Setup router dan jalankan server
 
 **Update `.gitignore`** — Tambahkan:
 ```
@@ -639,6 +651,26 @@ Harus return: `OK`
 | `server berjalan` tapi `curl` error | Firewall blokir port 3000 | Cek dengan `lsof -i :3000` atau coba port lain di `.env` |
 
 **Database sudah connected, siap untuk membuat tables via migrations di Bab 24.**
+
+---
+
+## Ringkasan File yang Dibuat/Diupdate di Bab 23
+
+| File | Status | Deskripsi |
+|------|--------|-----------|
+| `.env` | 🆕 BARU | Environment variables untuk database URL, JWT secret, PORT |
+| `.env.example` | 🆕 BARU | Template .env yang aman untuk di-commit |
+| `docker-compose.yml` | 🆕 BARU | Konfigurasi PostgreSQL container |
+| `src/db.rs` | 🆕 BARU | Connection pool initialization dengan SQLx |
+| `src/main.rs` | ✏️ DIUPDATE | Tambah `mod db;`, AppState struct, database initialization |
+| `.gitignore` | ✏️ DIUPDATE | Tambah `.env` ke ignore list |
+
+**Total: 6 file baru/updated**
+
+**Penting:** 
+- ✅ `.env` **JANGAN di-commit** ke Git (sudah di-`.gitignore`)
+- ✅ `.env.example` aman untuk di-commit
+- ✅ `docker-compose.yml` aman untuk di-commit
 
 ---
 
