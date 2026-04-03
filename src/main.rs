@@ -1,6 +1,7 @@
 mod models;
 mod dto;
 mod common;
+mod db;
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
@@ -12,6 +13,13 @@ use serde_json::{json, Value};
 use crate::dto::CreateTicketDto;
 use validator::Validate;
 use tokio::net::TcpListener;
+use db::create_pool;
+use sqlx::PgPool;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+}
 
 #[derive(Deserialize)]
 struct TicketFilters {
@@ -131,12 +139,28 @@ mod tests {
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL harus di-set di .env");
+
+    let pool = create_pool(&database_url).await;
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Gagal menjalankan migrations");
+
+    let state = AppState { db: pool };
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/tickets", ticket_routes())
         .nest("/users", user_routes());
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    println!("Server berjalan di http://localhost:3000");
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+
+    println!("Server berjalan di http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
