@@ -3,11 +3,13 @@ mod dto;
 mod common;
 mod db;
 mod repositories;
+mod services;
+mod handlers;
 
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -20,9 +22,10 @@ use db::create_pool;
 use crate::repositories::{
     UserRepository, TicketRepository, ResponseRepository, DashboardRepository,
 };
+use crate::services::AuthService;
 
 // ============================================
-// AppState — berbagi repositories dan pool ke semua handler
+// AppState — berbagi repositories, services, dan pool ke semua handler
 // ============================================
 #[derive(Clone)]
 pub struct AppState {
@@ -31,15 +34,19 @@ pub struct AppState {
     pub ticket_repo: TicketRepository,
     pub response_repo: ResponseRepository,
     pub dashboard_repo: DashboardRepository,
+    pub auth_service: AuthService,
 }
 
 impl AppState {
     pub fn new(pool: PgPool) -> Self {
+        let user_repo = UserRepository::new(pool.clone());
+
         Self {
-            user_repo: UserRepository::new(pool.clone()),
+            user_repo: user_repo.clone(),
             ticket_repo: TicketRepository::new(pool.clone()),
             response_repo: ResponseRepository::new(pool.clone()),
             dashboard_repo: DashboardRepository::new(pool.clone()),
+            auth_service: AuthService::new(user_repo),
             db: pool,
         }
     }
@@ -160,9 +167,19 @@ async fn main() {
         }
     }
 
+    // Buat AppState dengan semua repositories dan services
+    let state = AppState::new(pool);
+
+    // Setup auth routes dengan state
+    let auth_routes = Router::new()
+        .route("/auth/register", post(handlers::auth_handler::register))
+        .route("/auth/login", post(handlers::auth_handler::login))
+        .with_state(state);
+
     // Setup router dengan semua routes
     let app = Router::new()
         .route("/health", get(health_check))
+        .merge(auth_routes)
         .nest("/tickets", ticket_routes())
         .nest("/users", user_routes());
 
