@@ -1,4 +1,5 @@
 mod models;
+mod dto;
 
 use axum::{
     extract::{Path, Query},
@@ -9,6 +10,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
+use crate::dto::CreateTicketDto;
+use validator::Validate;
 
 #[derive(Deserialize)]
 struct TicketFilters {
@@ -41,8 +44,22 @@ async fn get_ticket(Path(id): Path<u32>) -> (StatusCode, Json<Value>) {
     })))
 }
 
-async fn create_ticket(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
-    println!("Body diterima: {:?}", body);
+async fn create_ticket(Json(body): Json<CreateTicketDto>) -> (StatusCode, Json<Value>) {
+    // Validasi input sebelum proses
+    if let Err(errors) = body.validate() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({
+                "success": false,
+                "message": "Validasi gagal",
+                "errors": errors.to_string()
+            })),
+        );
+    }
+
+    // Data sudah bersih, lanjut proses bisnis
+    println!("Ticket baru: subject={}, category={}", body.subject, body.category);
+
     (StatusCode::CREATED, Json(json!({
         "success": true,
         "message": "Ticket berhasil dibuat"

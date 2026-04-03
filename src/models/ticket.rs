@@ -36,3 +36,22 @@ pub struct CreateTicketDto {
     pub category: String,
     pub priority: String,
 }
+
+// ============================================
+// Dari latihan Bab 20
+// ============================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TicketResponse {
+    pub id: Uuid,
+    pub ticket_id: Uuid,
+    pub user_id: Uuid,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTicketResponseDto {
+    pub message: String,
+}

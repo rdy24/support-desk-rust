@@ -86,6 +86,8 @@ mod tests {
 
 Jalankan dengan: `cargo test test_user_serialization -- --nocapture`
 
+**Catatan:** Latihan #3 sudah dilakukan saat Bab 20, maka di Bab 21 test ini opsional untuk diperbaharui.
+
 ### Latihan #4: Ubah `role` menjadi enum (OPTIONAL)
 
 Jika ingin dikerjakan, buat enum di `src/models/user.rs`:
@@ -471,12 +473,14 @@ Setelah struct ter-derive dengan `Validate`, menjalankan validasinya mudah. Pang
 
 **Ini adalah update handler `create_ticket` di `src/main.rs` dari Bab 19:**
 
+Tambahkan import di awal file:
 ```rust
-use axum::{http::StatusCode, Json};
-use serde_json::{json, Value};
-
 use crate::dto::CreateTicketDto;  // ← Import dari dto folder (NEW)
+use validator::Validate;          // ← Import untuk validasi (NEW)
+```
 
+Lalu update function handler:
+```rust
 async fn create_ticket(
     Json(body): Json<CreateTicketDto>,  // ← CHANGE: Json<Value> → Json<CreateTicketDto>
 ) -> (StatusCode, Json<Value>) {

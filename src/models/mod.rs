@@ -3,5 +3,5 @@ pub mod ticket;
 pub mod user;
 
 pub use api_response::ApiResponse;
-pub use ticket::{CreateTicketDto, Ticket};
+pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
 pub use user::User;
