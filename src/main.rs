@@ -129,6 +129,17 @@ async fn main() {
         Err(e) => eprintln!("✗ Database connection failed: {}", e),
     }
 
+    // Jalankan migrations otomatis
+    match sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await {
+        Ok(_) => println!("✓ Migrations executed successfully"),
+        Err(e) => {
+            eprintln!("✗ Migrations failed: {}", e);
+            return;
+        }
+    }
+
     // Setup router dengan semua routes
     let app = Router::new()
         .route("/health", get(health_check))

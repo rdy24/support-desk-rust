@@ -100,45 +100,85 @@ sqlx --version
 
 ## Buat Migration Files
 
-Buat file migration-nya dengan perintah ini. **Penting: gunakan flag `-r` untuk membuat reversible migrations (up & down files)**:
+Buat file migration-nya dengan perintah ini. **Penting: jalankan SATU PER SATU dengan jeda, gunakan flag `-r` untuk reversible migrations**:
 
 ```bash
+# Langkah 1: Create users table (migration pertama)
 sqlx migrate add -r create_users_table
+sleep 1
+
+# Langkah 2: Create tickets table (migration kedua - perlu jeda 1 detik)
 sqlx migrate add -r create_tickets_table
+sleep 1
+
+# Langkah 3: Create ticket responses table (migration ketiga - perlu jeda 1 detik)
 sqlx migrate add -r create_ticket_responses_table
+sleep 1
+
+# Langkah 4: Add indexes (migration keempat - perlu jeda 1 detik)
+sqlx migrate add -r add_indexes
 ```
 
-Flag `-r` (reversible) sangat penting! Tanpa `-r`, `sqlx migrate add` hanya membuat 1 file `.sql` biasa, bukan `.up.sql` dan `.down.sql`.
+**Mengapa harus satu per satu?** Karena SQLx menggunakan **timestamp yang presisi hingga detik** untuk menentukan urutan migration. Jika semua command dijalankan bersamaan dalam 1 detik yang sama, semua migration akan dapat timestamp yang identik dan urutan tidak terjamin. Ini penting karena:
+- `create_users_table` harus jalan **PERTAMA** (users table harus exist)
+- `create_tickets_table` harus jalan **KEDUA** (butuh reference ke users table)
+- `create_ticket_responses_table` harus jalan **KETIGA** (butuh reference ke tickets table)
+
+**Flag `-r` (reversible) sangat penting!** Tanpa `-r`, `sqlx migrate add` hanya membuat 1 file `.sql` biasa, bukan `.up.sql` dan `.down.sql`.
 
 Setiap perintah akan generate dua file di folder `migrations/`:
 - `{timestamp}_{nama}.up.sql`: SQL untuk *apply* perubahan
 - `{timestamp}_{nama}.down.sql`: SQL untuk *undo* perubahan (rollback)
 
-Hasilnya folder `migrations/` akan terlihat seperti ini:
+Hasilnya folder `migrations/` akan terlihat seperti ini (dengan timestamp berbeda **1 detik**):
 
 ```
 migrations/
-├── 20260301000001_create_users_table.up.sql
-├── 20260301000001_create_users_table.down.sql
-├── 20260301000002_create_tickets_table.up.sql
-├── 20260301000002_create_tickets_table.down.sql
-├── 20260301000003_create_ticket_responses_table.up.sql
-└── 20260301000003_create_ticket_responses_table.down.sql
+├── 20260403021603_create_users_table.up.sql          ← timestamp: 021603
+├── 20260403021603_create_users_table.down.sql
+├── 20260403021604_create_tickets_table.up.sql        ← timestamp: 021604 (1 detik kemudian)
+├── 20260403021604_create_tickets_table.down.sql
+├── 20260403021605_create_ticket_responses_table.up.sql  ← timestamp: 021605 (1 detik kemudian)
+├── 20260403021605_create_ticket_responses_table.down.sql
+├── 20260403021606_add_indexes.up.sql                 ← timestamp: 021606 (1 detik kemudian)
+└── 20260403021606_add_indexes.down.sql
 ```
 
-Angka timestamp di depan memastikan migration selalu dijalankan berurutan.
+**Perhatikan timestamp!** Setiap detik harus berbeda (021603, 021604, 021605, 021606). Ini memastikan SQLx menjalankan migrations dalam urutan yang tepat.
 
-### ⚠️ Penting: Flag `-r` untuk Reversible Migrations
+### ⚠️ Penting: Flag `-r` dan Jeda Waktu
 
+**Kesalahan umum #1: Tidak menggunakan flag `-r`**
 Kalau kamu jalankan `sqlx migrate add <nama>` **tanpa** flag `-r`, hanya akan terbuat **1 file**:
 ```
-migrations/20260301000001_nama.sql  ← HANYA 1 FILE
+migrations/20260403021603_nama.sql  ← HANYA 1 FILE
 ```
 
-Untuk membuat 2 file (up & down), **HARUS pakai `-r`**:
+**Kesalahan umum #2: Menjalankan semua command sekaligus**
+Jika kamu copy-paste ketiga command sekaligus tanpa jeda:
 ```bash
-sqlx migrate add -r <nama>  ← Dengan flag -r
-# Hasil: 2 files (.up.sql dan .down.sql)
+sqlx migrate add -r create_users_table
+sqlx migrate add -r create_tickets_table
+sqlx migrate add -r create_ticket_responses_table
+# ❌ SALAH! Semua dapat timestamp yang sama seperti: 20260403021603_*
+```
+
+Hasilnya:
+```
+migrations/
+├── 20260403021603_create_users_table.up.sql
+├── 20260403021603_create_tickets_table.up.sql      ← Timestamp SAMA!
+├── 20260403021603_create_ticket_responses_table.up.sql  ← Timestamp SAMA!
+```
+
+Ini akan menyebabkan error saat menjalankan migration karena urutan tidak terjamin.
+
+**Solusi: Jalankan satu per satu dengan `sleep 1`:**
+```bash
+sqlx migrate add -r create_users_table && sleep 1
+sqlx migrate add -r create_tickets_table && sleep 1
+sqlx migrate add -r create_ticket_responses_table && sleep 1
+sqlx migrate add -r add_indexes
 ```
 
 Setelah migration pertama pakai `-r`, migration berikutnya otomatis juga reversible.
@@ -444,38 +484,77 @@ DROP INDEX IF EXISTS idx_users_email;
 ```
 
 **Update File: `src/main.rs`** — Tambahkan auto-migration di main():
+
+**Lokasi:** Update fungsi `main()` di `src/main.rs` (tambahkan kode auto-migration setelah koneksi database berhasil)
+
+**Kode yang ditambahkan:**
+
+```rust
+    // Jalankan migrations otomatis
+    match sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await {
+        Ok(_) => println!("✓ Migrations executed successfully"),
+        Err(e) => {
+            eprintln!("✗ Migrations failed: {}", e);
+            return;
+        }
+    }
+```
+
+Tambahkan kode di atas **SETELAH** test query database dan **SEBELUM** setup router. Urutan lengkapnya di `main()`:
+
 ```rust
 #[tokio::main]
 async fn main() {
+    // Load .env file
     dotenvy::dotenv().ok();
 
+    // Baca DATABASE_URL dari environment
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL harus di-set di .env");
 
+    // Buat connection pool ke database
     let pool = create_pool(&database_url).await;
 
-    // ← TAMBAH INI: Auto-run migrations
-    sqlx::migrate!("./migrations")
+    // Verifikasi koneksi berhasil dengan test query
+    match sqlx::query("SELECT 1").execute(&pool).await {
+        Ok(_) => println!("✓ Database connected successfully"),
+        Err(e) => eprintln!("✗ Database connection failed: {}", e),
+    }
+
+    // Jalankan migrations otomatis ← TAMBAH INI
+    match sqlx::migrate!("./migrations")
         .run(&pool)
-        .await
-        .expect("Gagal menjalankan migrations");
+        .await {
+        Ok(_) => println!("✓ Migrations executed successfully"),
+        Err(e) => {
+            eprintln!("✗ Migrations failed: {}", e);
+            return;
+        }
+    }
 
-    let state = AppState { db: pool };
-
+    // Setup router dengan semua routes
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/tickets", ticket_routes())
-        .nest("/users", user_routes())
-        .with_state(state);
+        .nest("/users", user_routes());
 
+    // Baca PORT dari environment, default 3000 jika tidak ada
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await.unwrap();
 
+    let listener = TcpListener::bind(&addr).await.unwrap();
     println!("Server berjalan di http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 ```
+
+**Penjelasan:**
+- `sqlx::migrate!("./migrations")` membaca semua migration files dari folder `./migrations`
+- `.run(&pool)` menjalankan semua migration yang belum pernah dijalankan sebelumnya
+- SQLx otomatis track yang sudah dijalankan di tabel `_sqlx_migrations`, jadi safe untuk di-run berulang kali
+- Error handling dengan `match` memastikan aplikasi berhenti dengan pesan yang jelas kalau migration gagal, daripada silent error
 
 **Verifikasi:**
 ```bash
