@@ -1,3 +1,5 @@
+mod models;
+
 use axum::{
     extract::{Path, Query},
     http::StatusCode,

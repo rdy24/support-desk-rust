@@ -89,7 +89,7 @@ Pastikan sudah selesai Bab 19. Jika sudah, `src/main.rs` kamu seharusnya terliha
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
@@ -100,6 +100,7 @@ use tokio::net::TcpListener;
 struct TicketFilters {
     page: Option<u32>,
     limit: Option<u32>,
+    #[serde(default)]
     status: Option<String>,
     priority: Option<String>,  // dari latihan #2
 }
@@ -114,6 +115,7 @@ async fn get_tickets(Query(filters): Query<TicketFilters>) -> Json<Value> {
         "data": [],
         "page": filters.page.unwrap_or(1),
         "limit": filters.limit.unwrap_or(10),
+        "status": filters.status,
         "priority": filters.priority
     }))
 }
@@ -140,8 +142,10 @@ async fn delete_ticket(Path(id): Path<u32>) -> StatusCode {
 
 fn ticket_routes() -> Router {
     Router::new()
-        .route("/", get(get_tickets).post(create_ticket))
-        .route("/{id}", get(get_ticket).delete(delete_ticket))
+        .route("/", get(get_tickets))
+        .route("/", axum::routing::post(create_ticket))
+        .route("/{id}", get(get_ticket))
+        .route("/{id}", axum::routing::delete(delete_ticket))
 }
 
 async fn get_users() -> Json<Value> {
@@ -607,7 +611,7 @@ mod models;
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;

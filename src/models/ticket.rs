@@ -1,0 +1,38 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+// ============================================
+// STRUCT: Ticket (model utama, untuk database)
+// ============================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Ticket {
+    pub id: Uuid,
+    pub customer_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<Uuid>,
+    pub category: String,
+    pub priority: String,
+    pub status: String,
+    pub subject: String,
+    pub description: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// ============================================
+// DTO: CreateTicketDto (untuk input dari client)
+// ============================================
+// DTO hanya berisi field yang BOLEH dikirim client.
+// Field seperti id, createdAt, status tidak boleh diisi client.
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTicketDto {
+    pub subject: String,
+    pub description: String,
+    pub category: String,
+    pub priority: String,
+}
