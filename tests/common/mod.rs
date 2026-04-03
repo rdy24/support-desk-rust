@@ -63,6 +63,7 @@ pub async fn setup_test_app() -> (String, PgPool) {
 }
 
 /// Register user dan ambil token (helper untuk authenticated tests)
+#[allow(dead_code)]
 pub async fn register_and_login(
     base_url: &str,
     email: &str,

@@ -28,7 +28,7 @@ pub async fn get_me(
 /// GET /users — Ambil semua user
 pub async fn get_all_users(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, crate::common::AppError> {
     let (users, total) = state
@@ -46,7 +46,7 @@ pub async fn get_all_users(
 /// GET /agents — Ambil semua agent
 pub async fn get_agents(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, crate::common::AppError> {
     let (agents, total) = state
@@ -64,7 +64,7 @@ pub async fn get_agents(
 /// GET /customers — Ambil semua customer
 pub async fn get_customers(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, crate::common::AppError> {
     let (customers, total) = state
@@ -82,7 +82,7 @@ pub async fn get_customers(
 /// GET /users/:id — Ambil user berdasarkan ID
 pub async fn get_user(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, crate::common::AppError> {
     let user = state.user_service.get_by_id(user_id).await?;
@@ -96,7 +96,7 @@ pub async fn get_user(
 /// PATCH /users/:id — Update user
 pub async fn update_user(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Path(user_id): Path<Uuid>,
     Json(dto): Json<UpdateUserDto>,
 ) -> Result<Json<serde_json::Value>, crate::common::AppError> {

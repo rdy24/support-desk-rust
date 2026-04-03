@@ -73,19 +73,19 @@ pub fn create_app(pool: PgPool, jwt_secret: String) -> Router {
         // User routes
         .route("/me", get(handlers::user_handler::get_me))
         .route("/users", get(handlers::user_handler::get_all_users))
-        .route("/users/:id", get(handlers::user_handler::get_user))
-        .route("/users/:id", patch(handlers::user_handler::update_user))
-        .route("/users/:id", axum::routing::delete(handlers::user_handler::delete_user))
+        .route("/users/{id}", get(handlers::user_handler::get_user))
+        .route("/users/{id}", patch(handlers::user_handler::update_user))
+        .route("/users/{id}", axum::routing::delete(handlers::user_handler::delete_user))
         .route("/agents", get(handlers::user_handler::get_agents))
         .route("/customers", get(handlers::user_handler::get_customers))
         // Ticket routes
         .route("/tickets", post(handlers::ticket_handler::create_ticket))
         .route("/tickets", get(handlers::ticket_handler::get_tickets))
-        .route("/tickets/:id", get(handlers::ticket_handler::get_ticket))
-        .route("/tickets/:id", patch(handlers::ticket_handler::update_ticket))
-        .route("/tickets/:id", axum::routing::delete(handlers::ticket_handler::delete_ticket))
-        .route("/tickets/:id/responses", post(handlers::ticket_handler::add_response))
-        .route("/tickets/:id/responses", get(handlers::ticket_handler::get_responses))
+        .route("/tickets/{id}", get(handlers::ticket_handler::get_ticket))
+        .route("/tickets/{id}", patch(handlers::ticket_handler::update_ticket))
+        .route("/tickets/{id}", axum::routing::delete(handlers::ticket_handler::delete_ticket))
+        .route("/tickets/{id}/responses", post(handlers::ticket_handler::add_response))
+        .route("/tickets/{id}/responses", get(handlers::ticket_handler::get_responses))
         // Dashboard routes
         .route("/dashboard/stats", get(handlers::dashboard_handler::get_stats))
         .with_state(state);

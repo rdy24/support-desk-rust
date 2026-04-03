@@ -164,7 +164,7 @@ pub async fn get_me(
 
 pub async fn get_all_users(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let (users, total) = state
@@ -181,7 +181,7 @@ pub async fn get_all_users(
 
 pub async fn get_agents(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let (agents, total) = state
@@ -198,7 +198,7 @@ pub async fn get_agents(
 
 pub async fn get_customers(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Query(filters): Query<UserFilters>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let (customers, total) = state
@@ -215,7 +215,7 @@ pub async fn get_customers(
 
 pub async fn get_user(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = state.user_service.get_by_id(user_id).await?;
@@ -227,7 +227,7 @@ pub async fn get_user(
 
 pub async fn update_user(
     State(state): State<AppState>,
-    AdminOnly(claims): AdminOnly,
+    AdminOnly(_claims): AdminOnly,
     Path(user_id): Path<Uuid>,
     Json(dto): Json<UpdateUserDto>,
 ) -> Result<Json<serde_json::Value>, AppError> {
@@ -249,7 +249,7 @@ pub async fn delete_user(
 
 pub async fn get_stats(
     State(state): State<AppState>,
-    AdminOrAgent(claims): AdminOrAgent,
+    AdminOrAgent(_claims): AdminOrAgent,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let stats = state.dashboard_service.get_stats().await?;
     Ok(Json(json!({

@@ -222,7 +222,6 @@ impl UserRepository {
         if role.is_some() {
             updates.push(format!("role = ${}::user_role", param_count));
             bindings.push(role.unwrap().to_string());
-            param_count += 1;
         }
 
         // Jika tidak ada field yang diupdate, return existing user
