@@ -5,6 +5,7 @@ mod db;
 mod repositories;
 mod services;
 mod handlers;
+mod middleware;
 
 use axum::{
     extract::{Path, Query},
@@ -35,10 +36,11 @@ pub struct AppState {
     pub response_repo: ResponseRepository,
     pub dashboard_repo: DashboardRepository,
     pub auth_service: AuthService,
+    pub jwt_secret: String,
 }
 
 impl AppState {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: PgPool, jwt_secret: String) -> Self {
         let user_repo = UserRepository::new(pool.clone());
 
         Self {
@@ -46,7 +48,8 @@ impl AppState {
             ticket_repo: TicketRepository::new(pool.clone()),
             response_repo: ResponseRepository::new(pool.clone()),
             dashboard_repo: DashboardRepository::new(pool.clone()),
-            auth_service: AuthService::new(user_repo),
+            auth_service: AuthService::new(user_repo, jwt_secret.clone()),
+            jwt_secret,
             db: pool,
         }
     }
@@ -167,8 +170,12 @@ async fn main() {
         }
     }
 
+    // Baca JWT_SECRET dari environment
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .expect("JWT_SECRET harus di-set di .env");
+
     // Buat AppState dengan semua repositories dan services
-    let state = AppState::new(pool);
+    let state = AppState::new(pool, jwt_secret);
 
     // Setup auth routes dengan state
     let auth_routes = Router::new()
