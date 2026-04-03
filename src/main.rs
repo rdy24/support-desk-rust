@@ -2,6 +2,7 @@ mod models;
 mod dto;
 mod common;
 mod db;
+mod repositories;
 
 use axum::{
     extract::{Path, Query},

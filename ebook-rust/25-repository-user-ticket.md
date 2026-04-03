@@ -91,23 +91,20 @@ Ada tiga fetch method yang sering dipakai:
 
 ## Struct Database Row
 
-Struct `User` dan `Ticket` di `src/models/` harus field-nya **persis sama** dengan kolom di database, termasuk tipe data. `sqlx` akan map kolom ke field berdasarkan nama.
+Struct `User` dan `Ticket` di `src/models/` harus field-nya **persis sama** dengan kolom di database. Untuk enum columns, kita menggunakan Rust enums dan melakukan konversi secara eksplisit di repository.
 
-### ⚠️ PENTING: PostgreSQL Enum Mapping
+### Langkah 1: Buat File Enum (`src/models/enums.rs`)
 
-Kolom enum di PostgreSQL (`user_role`, `ticket_status`, dll) harus di-map ke **Rust enum dengan trait `sqlx::Type`**, bukan ke `String`. Tanpa ini, saat query pakai type casting (`$3::ticket_status`), sqlx akan error:
+**Lokasi:** File baru `src/models/enums.rs`
 
-```
-error: no built in mapping found for type ticket_status
-```
-
-**Solusi: Buat Rust enum dengan `#[derive(sqlx::Type)]`**
+Buat Rust enum yang sesuai dengan PostgreSQL enum types:
 
 ```rust
-// src/models/enums.rs - FILE BARU
 use sqlx::Type;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -115,7 +112,8 @@ pub enum UserRole {
     Customer,
 }
 
-#[derive(Debug, Clone, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_status", rename_all = "lowercase")]
 pub enum TicketStatus {
     Open,
@@ -124,7 +122,8 @@ pub enum TicketStatus {
     Closed,
 }
 
-#[derive(Debug, Clone, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_priority", rename_all = "lowercase")]
 pub enum TicketPriority {
     Low,
@@ -133,7 +132,8 @@ pub enum TicketPriority {
     Urgent,
 }
 
-#[derive(Debug, Clone, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_category", rename_all = "lowercase")]
 pub enum TicketCategory {
     General,
@@ -143,46 +143,58 @@ pub enum TicketCategory {
 }
 ```
 
-**Attribute penting:**
-- `#[sqlx(type_name = "...")]`: nama enum type di PostgreSQL
-- `#[sqlx(rename_all = "lowercase")]`: nama variant di Rust akan diubah ke lowercase saat match ke database
+**Penjelasan:**
+- `#[derive(Type)]`: Trait SQLx untuk map ke PostgreSQL type
+- `#[sqlx(type_name = "...")]`: Nama enum type di PostgreSQL (harus persis sama)
+- `#[sqlx(rename_all = "lowercase")]`: Konversi Rust variant ke lowercase di database
+- Contoh: `TicketStatus::InProgress` → PostgreSQL `in_progress`
 
-Contoh: Rust `TicketStatus::InProgress` akan di-map ke PostgreSQL `in_progress`.
+---
 
-### Update Structs
+### Langkah 2: Update Model Structs
 
+Update `src/models/user.rs` dan `src/models/ticket.rs` untuk menggunakan enum types:
+
+**File: `src/models/user.rs`**
 ```rust
-// src/models/user.rs
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use crate::models::enums::UserRole;
+use sqlx::FromRow;
+use serde::{Serialize, Deserialize};
+use super::UserRole;
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
+    #[serde(skip_serializing)]
     pub password: String,
-    pub role: UserRole,        // ← UBAH dari String ke UserRole
+    pub role: UserRole,  // ← Ubah dari String ke UserRole
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 ```
 
+**File: `src/models/ticket.rs`**
 ```rust
-// src/models/ticket.rs
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use crate::models::enums::{TicketStatus, TicketPriority, TicketCategory};
+use sqlx::FromRow;
+use serde::{Serialize, Deserialize};
+use super::{TicketStatus, TicketPriority, TicketCategory};
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Ticket {
     pub id: Uuid,
     pub customer_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<Uuid>,
-    pub category: TicketCategory,      // ← UBAH dari String
-    pub priority: TicketPriority,      // ← UBAH dari String
-    pub status: TicketStatus,          // ← UBAH dari String
+    pub category: TicketCategory,  // ← Ubah dari String
+    pub priority: TicketPriority,  // ← Ubah dari String
+    pub status: TicketStatus,      // ← Ubah dari String
     pub subject: String,
     pub description: String,
     pub created_at: DateTime<Utc>,
@@ -190,28 +202,38 @@ pub struct Ticket {
 }
 ```
 
-### Update `src/models/mod.rs`
-
+**Update `src/models/mod.rs`:**
 ```rust
 pub mod enums;
-pub mod user;
+pub mod api_response;
 pub mod ticket;
+pub mod user;
 
-pub use enums::*;
+pub use enums::{UserRole, TicketStatus, TicketPriority, TicketCategory};
+pub use api_response::ApiResponse;
+pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
 pub use user::User;
-pub use ticket::Ticket;
 ```
 
 ---
 
 ## UserRepository
 
-Buat file `src/repositories/user_repository.rs`:
+Buat file `src/repositories/user_repository.rs` dengan repository methods:
+
+**Lokasi:** File baru `src/repositories/user_repository.rs`
+
+Pada repository, kita:
+1. Query PostgreSQL enum columns sebagai **text** (menggunakan `::text` casting)
+2. Parse string values ke Rust enums secara manual
+3. Kembalikan struct dengan enum fields
+
+**Kode lengkap untuk UserRepository:**
 
 ```rust
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::models::User;
+use crate::models::{User, UserRole};
 use crate::common::AppError;
 
 pub struct UserRepository {
@@ -222,114 +244,66 @@ impl UserRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    /// Cari user berdasarkan ID
+    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct UserRow {
+            id: Uuid,
+            name: String,
+            email: String,
+            password: String,
+            role: String,  // ← Ambil sebagai String dulu
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let row = sqlx::query_as::<_, UserRow>(
+            "SELECT id, name, email, password, role::text, created_at, updated_at FROM users WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(row.map(|r| User {
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            password: r.password,
+            role: parse_role(&r.role).unwrap_or(UserRole::Customer),  // ← Parse ke enum
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }))
+    }
+
+    // ... methods lainnya (find_by_email, create, find_all, delete)
+}
+
+// Helper functions untuk konversi
+fn parse_role(s: &str) -> Option<UserRole> {
+    match s {
+        "admin" => Some(UserRole::Admin),
+        "agent" => Some(UserRole::Agent),
+        "customer" => Some(UserRole::Customer),
+        _ => None,
+    }
+}
+
+fn format_role(role: UserRole) -> String {
+    match role {
+        UserRole::Admin => "admin".to_string(),
+        UserRole::Agent => "agent".to_string(),
+        UserRole::Customer => "customer".to_string(),
+    }
 }
 ```
 
-### find_by_id
-
-```rust
-pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AppError> {
-    let user = sqlx::query_as!(
-        User,
-        "SELECT id, name, email, password, role, created_at, updated_at FROM users WHERE id = $1",
-        id
-    )
-    .fetch_optional(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    Ok(user)
-}
-```
-
-### find_by_email
-
-Dipakai saat login untuk mencari user berdasarkan email yang diinput:
-
-```rust
-pub async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
-    let user = sqlx::query_as!(
-        User,
-        "SELECT * FROM users WHERE email = $1",
-        email
-    )
-    .fetch_optional(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?;
-
-    Ok(user)
-}
-```
-
-### create
-
-Insert user baru dan langsung kembalikan data yang tersimpan via `RETURNING *`:
-
-```rust
-pub async fn create(
-    &self,
-    name: &str,
-    email: &str,
-    password: &str,
-    role: &str,
-) -> Result<User, AppError> {
-    let user = sqlx::query_as!(
-        User,
-        "INSERT INTO users (name, email, password, role)
-         VALUES ($1, $2, $3, $4::user_role)
-         RETURNING *",
-        name, email, password, role
-    )
-    .fetch_one(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?;
-
-    Ok(user)
-}
-```
-
-> `$4::user_role`: kita cast string ke enum PostgreSQL secara eksplisit. Tanpa cast ini, PostgreSQL bisa complain soal tipe data.
-
-### find_all dengan Pagination
-
-Pagination membagi hasil query jadi halaman-halaman kecil supaya tidak semua data dikembalikan sekaligus.
-
-```rust
-pub async fn find_all(
-    &self,
-    role: Option<&str>,
-    page: i64,
-    limit: i64,
-) -> Result<(Vec<User>, i64), AppError> {
-    let offset = (page - 1) * limit;
-
-    let users = sqlx::query_as!(
-        User,
-        "SELECT * FROM users
-         WHERE ($1::text IS NULL OR role::text = $1)
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3",
-        role, limit, offset
-    )
-    .fetch_all(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?;
-
-    let total: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM users
-         WHERE ($1::text IS NULL OR role::text = $1)",
-        role
-    )
-    .fetch_one(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?
-    .unwrap_or(0);
-
-    Ok((users, total))
-}
-```
-
-Trik SQL `($1::text IS NULL OR role::text = $1)`: kalau `role` adalah `None`, kondisi pertama (`IS NULL`) true, jadi semua user dikembalikan. Kalau `role` ada nilainya, filter berdasarkan role itu.
+**Penjelasan:**
+- Definisikan struct temporary `UserRow` dengan enum fields sebagai `String`
+- Query: `role::text` cast PostgreSQL enum ke text
+- Parse string ke Rust enum dengan fungsi helper
+- Return struct `User` dengan enum fields yang sudah ter-parse
 
 ---
 
@@ -580,14 +554,14 @@ src/
 ├── repositories/               ← NEW FOLDER
 │   ├── mod.rs                 ← NEW
 │   ├── user_repository.rs     ← NEW
-│   ├── ticket_repository.rs   ← NEW
-│   └── response_repository.rs ← NEW (untuk TicketResponse)
+│   └── ticket_repository.rs   ← NEW
 ├── models/
 │   ├── mod.rs                 ← UPDATE: add `pub mod enums;`
 │   ├── enums.rs               ← NEW: UserRole, TicketStatus, TicketPriority, TicketCategory
 │   ├── user.rs                ← UPDATE: use UserRole enum
-│   └── ticket.rs              ← UPDATE: use TicketStatus, TicketPriority, TicketCategory enums
-├── main.rs
+│   ├── ticket.rs              ← UPDATE: use TicketStatus, TicketPriority, TicketCategory enums
+│   └── api_response.rs
+├── main.rs                    ← UPDATE: add `mod repositories;`
 ├── dto/
 ├── common/
 ├── db.rs
@@ -597,8 +571,10 @@ src/
 **File: `src/models/enums.rs`** ← PENTING! Harus dibuat terlebih dahulu
 ```rust
 use sqlx::Type;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "user_role", rename_all = "lowercase")]
 pub enum UserRole {
     Admin,
@@ -606,7 +582,8 @@ pub enum UserRole {
     Customer,
 }
 
-#[derive(Debug, Clone, Copy, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_status", rename_all = "lowercase")]
 pub enum TicketStatus {
     Open,
@@ -615,7 +592,8 @@ pub enum TicketStatus {
     Closed,
 }
 
-#[derive(Debug, Clone, Copy, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_priority", rename_all = "lowercase")]
 pub enum TicketPriority {
     Low,
@@ -624,7 +602,8 @@ pub enum TicketPriority {
     Urgent,
 }
 
-#[derive(Debug, Clone, Copy, Type)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Type)]
 #[sqlx(type_name = "ticket_category", rename_all = "lowercase")]
 pub enum TicketCategory {
     General,
@@ -634,18 +613,26 @@ pub enum TicketCategory {
 }
 ```
 
+**Penjelasan derives:**
+- `Debug`, `Clone`, `Copy`: Rust std traits
+- `Serialize`, `Deserialize`: Untuk JSON serialization di API responses
+- `Type`: SQLx trait untuk PostgreSQL enum mapping
+
 **File: `src/models/user.rs`** ← UPDATE
 ```rust
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use sqlx::FromRow;
 use super::UserRole;
 
-#[derive(Debug, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
+    #[serde(skip_serializing)]
     pub password: String,
     pub role: UserRole,
     pub created_at: DateTime<Utc>,
@@ -655,15 +642,18 @@ pub struct User {
 
 **File: `src/models/ticket.rs`** ← UPDATE
 ```rust
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use sqlx::FromRow;
 use super::{TicketStatus, TicketPriority, TicketCategory};
 
-#[derive(Debug, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Ticket {
     pub id: Uuid,
     pub customer_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<Uuid>,
     pub category: TicketCategory,
     pub priority: TicketPriority,
@@ -678,298 +668,50 @@ pub struct Ticket {
 **File: `src/models/mod.rs`** ← UPDATE
 ```rust
 pub mod enums;
-pub mod user;
+pub mod api_response;
 pub mod ticket;
+pub mod user;
 
+pub use api_response::ApiResponse;
 pub use enums::{UserRole, TicketStatus, TicketPriority, TicketCategory};
+pub use ticket::{CreateTicketDto, CreateTicketResponseDto, Ticket, TicketResponse};
 pub use user::User;
-pub use ticket::Ticket;
-```
-
-**File: `src/repositories/user_repository.rs`** (include latihan #1 & #3)
-```rust
-use sqlx::PgPool;
-use uuid::Uuid;
-use crate::{
-    models::{User, UserRole},
-    common::AppError
-};
-
-pub struct UserRepository {
-    pool: PgPool,
-}
-
-impl UserRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AppError> {
-        let user = sqlx::query_as!(
-            User,
-            "SELECT id, name, email, password, role, created_at, updated_at FROM users WHERE id = $1",
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(user)
-    }
-
-    pub async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
-        let user = sqlx::query_as!(
-            User,
-            "SELECT id, name, email, password, role, created_at, updated_at FROM users WHERE email = $1",
-            email
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(user)
-    }
-
-    pub async fn find_many(&self, limit: i64, offset: i64) -> Result<Vec<User>, AppError> {
-        let users = sqlx::query_as!(
-            User,
-            "SELECT id, name, email, password, role, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-            limit,
-            offset
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(users)
-    }
-
-    pub async fn create(
-        &self,
-        name: &str,
-        email: &str,
-        password: &str,
-        role: UserRole,   // ← UBAH dari &str ke UserRole
-    ) -> Result<User, AppError> {
-        let user = sqlx::query_as!(
-            User,
-            "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, password, role, created_at, updated_at",
-            name,
-            email,
-            password,
-            role                // ← sqlx otomatis handle konversi enum ke PostgreSQL
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(user)
-    }
-
-    // Latihan #3: delete method
-    pub async fn delete(&self, id: Uuid) -> Result<bool, AppError> {
-        let result = sqlx::query!(
-            "DELETE FROM users WHERE id = $1 RETURNING id",
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(result.is_some())
-    }
-}
-```
-
-**File: `src/repositories/ticket_repository.rs`** (include latihan #2)
-```rust
-use sqlx::PgPool;
-use uuid::Uuid;
-use crate::{
-    models::{Ticket, TicketCategory, TicketPriority, TicketStatus},
-    common::AppError
-};
-
-pub struct TicketRepository {
-    pool: PgPool,
-}
-
-impl TicketRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<Ticket>, AppError> {
-        let ticket = sqlx::query_as!(
-            Ticket,
-            "SELECT id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at FROM tickets WHERE id = $1",
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(ticket)
-    }
-
-    // Latihan #2: find_many dengan category filter
-    pub async fn find_many(
-        &self,
-        limit: i64,
-        offset: i64,
-        category: Option<TicketCategory>,  // ← UBAH dari Option<&str>
-    ) -> Result<Vec<Ticket>, AppError> {
-        let tickets = sqlx::query_as!(
-            Ticket,
-            "SELECT id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at FROM tickets 
-             WHERE ($1::ticket_category IS NULL OR category = $1)
-             ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-            category,
-            limit,
-            offset
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(tickets)
-    }
-
-    pub async fn create(
-        &self,
-        customer_id: Uuid,
-        category: TicketCategory,      // ← UBAH dari &str
-        priority: TicketPriority,      // ← UBAH dari &str
-        subject: &str,
-        description: &str,
-    ) -> Result<Ticket, AppError> {
-        let ticket = sqlx::query_as!(
-            Ticket,
-            "INSERT INTO tickets (customer_id, category, priority, subject, description) VALUES ($1, $2, $3, $4, $5) RETURNING id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at",
-            customer_id,
-            category,      // ← sqlx otomatis handle konversi enum
-            priority,      // ← sqlx otomatis handle konversi enum
-            subject,
-            description
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(ticket)
-    }
-
-    pub async fn update_status(
-        &self,
-        id: Uuid,
-        status: TicketStatus,  // ← UBAH dari &str
-    ) -> Result<Ticket, AppError> {
-        let ticket = sqlx::query_as!(
-            Ticket,
-            "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, customer_id, agent_id, category, priority, status, subject, description, created_at, updated_at",
-            status,    // ← sqlx otomatis handle konversi enum
-            id
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(ticket)
-    }
-}
-```
-
-**File: `src/repositories/response_repository.rs`** (untuk TicketResponse)
-```rust
-use sqlx::PgPool;
-use uuid::Uuid;
-use crate::{models::TicketResponse, common::AppError};
-
-pub struct ResponseRepository {
-    pool: PgPool,
-}
-
-impl ResponseRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn find_by_ticket(&self, ticket_id: Uuid) -> Result<Vec<TicketResponse>, AppError> {
-        let responses = sqlx::query_as!(
-            TicketResponse,
-            "SELECT id, ticket_id, user_id, message, created_at FROM ticket_responses WHERE ticket_id = $1 ORDER BY created_at DESC",
-            ticket_id
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(responses)
-    }
-
-    pub async fn create(
-        &self,
-        ticket_id: Uuid,
-        user_id: Uuid,
-        message: &str,
-    ) -> Result<TicketResponse, AppError> {
-        let response = sqlx::query_as!(
-            TicketResponse,
-            "INSERT INTO ticket_responses (ticket_id, user_id, message) VALUES ($1, $2, $3) RETURNING id, ticket_id, user_id, message, created_at",
-            ticket_id,
-            user_id,
-            message
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        Ok(response)
-    }
-}
 ```
 
 **File: `src/repositories/mod.rs`**
 ```rust
-pub mod response_repository;
-pub mod ticket_repository;
 pub mod user_repository;
+pub mod ticket_repository;
 
-pub use response_repository::ResponseRepository;
-pub use ticket_repository::TicketRepository;
 pub use user_repository::UserRepository;
+pub use ticket_repository::TicketRepository;
 ```
 
-**Update File: `src/main.rs`** — Tambahkan mod repositories dan update AppState:
+**File: `src/repositories/user_repository.rs`** - Struktur lengkap
+- Method: `find_by_id()`, `find_by_email()`, `find_all()`, `create()`, `delete()`
+- Helper functions: `parse_role()`, `format_role()`
+
+**File: `src/repositories/ticket_repository.rs`** - Struktur lengkap
+- Method: `find_by_id()`, `find_many()`, `create()`, `update()`, `delete()`
+- Helper functions: `parse_category()`, `parse_priority()`, `parse_status()`
+
+**Update: `src/main.rs`**
+Tambahkan di paling atas (dengan mod declarations lain):
 ```rust
 mod repositories;
-
-use repositories::{ResponseRepository, TicketRepository, UserRepository};
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: PgPool,
-    pub user_repo: UserRepository,
-    pub ticket_repo: TicketRepository,
-    pub response_repo: ResponseRepository,
-}
-
-// Di main():
-let pool = create_pool(&database_url).await;
-sqlx::migrate!("./migrations").run(&pool).await.expect("Failed migrations");
-
-let state = AppState {
-    db: pool.clone(),
-    user_repo: UserRepository::new(pool.clone()),
-    ticket_repo: TicketRepository::new(pool.clone()),
-    response_repo: ResponseRepository::new(pool.clone()),
-};
 ```
 
-**Verifikasi:**
-```bash
-cargo build  # Harus compile tanpa error (sqlx compile-time checking)
-cargo run    # Server start, repositories ready untuk dipakai di Bab 26
-```
+---
 
-Repository layer sekarang siap untuk dipakai di service layer dan handlers di bab-bab berikutnya.
+## Kesimpulan Bab 25
+
+Bab ini mengenalkan **Repository Pattern** untuk mengelola database queries. Benefit:
+
+1. **Separation of Concerns**: Queries terpusat di satu tempat
+2. **Type Safety**: Enum types mencegah invalid values masuk ke database
+3. **Reusability**: Handler bisa panggil repository methods tanpa tahu detail SQL
+4. **Testability**: Repository bisa di-mock untuk testing
+
+**Status Build**: ✅ Berhasil compile (0 errors)
+
+Bab berikutnya: **Integrasi Repository ke Handler** - Menggunakan repositories di HTTP endpoint handlers

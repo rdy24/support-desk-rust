@@ -1,21 +1,23 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use sqlx::FromRow;
+use super::{TicketStatus, TicketPriority, TicketCategory};
 
 // ============================================
 // STRUCT: Ticket (model utama, untuk database)
 // ============================================
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Ticket {
     pub id: Uuid,
     pub customer_id: Uuid,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<Uuid>,
-    pub category: String,
-    pub priority: String,
-    pub status: String,
+    pub category: TicketCategory,
+    pub priority: TicketPriority,
+    pub status: TicketStatus,
     pub subject: String,
     pub description: String,
     pub created_at: DateTime<Utc>,
