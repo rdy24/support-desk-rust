@@ -2,10 +2,11 @@ mod models;
 mod dto;
 mod common;
 mod db;
+mod repositories;
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
@@ -15,10 +16,14 @@ use validator::Validate;
 use tokio::net::TcpListener;
 use db::create_pool;
 use sqlx::PgPool;
+use repositories::{UserRepository, TicketRepository, ResponseRepository};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
+    pub user_repo: UserRepository,
+    pub ticket_repo: TicketRepository,
+    pub response_repo: ResponseRepository,
 }
 
 #[derive(Deserialize)]
@@ -120,7 +125,7 @@ mod tests {
             name: "Budi".to_string(),
             email: "budi@example.com".to_string(),
             password: "secret_password".to_string(),
-            role: "customer".to_string(),
+            role: models::UserRole::Customer,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -151,7 +156,14 @@ async fn main() {
         .await
         .expect("Gagal menjalankan migrations");
 
-    let state = AppState { db: pool };
+    // Create app state for use in handlers (will be used in Bab 26-27)
+    let _app_state = AppState {
+        db: pool.clone(),
+        user_repo: UserRepository::new(pool.clone()),
+        ticket_repo: TicketRepository::new(pool.clone()),
+        response_repo: ResponseRepository::new(pool.clone()),
+    };
+
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/tickets", ticket_routes())
