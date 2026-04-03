@@ -47,7 +47,9 @@ pub async fn get_me(&self, claims: &Claims) -> Result<User, AppError> {
 }
 ```
 
-`claims.sub` adalah user ID dalam JWT. Parse jadi Uuid, lalu cari di database.
+`claims.sub` adalah user ID dalam JWT. Parse jadi Uuid bisa gagal kalau JWT-nya corrupt — makanya kita wrap dengan `map_err` untuk mengubah error parsing jadi `AppError::Internal` yang lebih informatif.
+
+`get_me` adalah endpoint paling sering dipanggil oleh frontend. Setiap kali user membuka dashboard, frontend memanggil ini untuk menampilkan nama, email, dan role. Sederhana tapi penting.
 
 ---
 
@@ -64,7 +66,9 @@ pub async fn get_all(
 }
 ```
 
-Untuk admin: filter role opsional, bisa filter "agent" atau "customer".
+Service layer ini terlihat "terlalu sederhana" — hanya memanggil repository. Tapi justru itulah poinnya. Saat nanti ada kebutuhan bisnis baru (misalnya: "jangan tampilkan user yang di-ban"), kamu tinggal tambahkan logika di sini tanpa mengubah handler atau repository. Separation of concerns membuat perubahan lebih terkontrol dan testable.
+
+Untuk admin: filter role opsional, bisa filter "agent" atau "customer". Return tuple `(Vec<User>, i64)` berisi list user dan total count (untuk pagination di frontend).
 
 ---
 
@@ -146,9 +150,11 @@ Sederhana: aggregate semua statistik dari repository.
 
 ---
 
-## Handlers: Free Functions
+## Handlers: Menerjemahkan HTTP ke Service
 
-Pattern yang sama dari Ch30: State extractor, role-based extractors, service calls.
+Sekarang kita buat handler untuk setiap endpoint. Pattern-nya sama seperti di Bab 30: handler menerima request via extractor, memanggil service, dan mengembalikan JSON response. Yang berbeda hanya role extractor — `AdminOnly` untuk operasi user management, `AdminOrAgent` untuk dashboard.
+
+Ingat: handler hanya 3-5 baris. Semua business logic ada di service atau middleware.
 
 ```rust
 pub async fn get_me(
@@ -258,6 +264,8 @@ pub async fn get_stats(
     })))
 }
 ```
+
+Perhatikan polanya: setiap handler hanya 3-5 baris kode. Tidak ada business logic di handler. Semua aturan (validasi, otorisasi, transformasi data) ada di service atau middleware. Handler hanya "menerjemahkan" HTTP ke pemanggilan service dan sebaliknya.
 
 ---
 

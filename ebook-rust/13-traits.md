@@ -88,11 +88,15 @@ Perhatikan `short_summary` di atas. Method itu punya **isi langsung** di dalam t
 
 ```rust
 fn short_summary(&self) -> String {
-    format!("{}...", &self.summary()[..50.min(self.summary().len())])
+    let s = self.summary();
+    let end = 50.min(s.len());
+    format!("{}...", &s[..end])
 }
 ```
 
 Ini disebut **default method**. Kalau struct yang implement trait ini tidak mendefinisikan `short_summary` sendiri, dia otomatis pakai versi default ini. Ibaratnya: kontrak kerja menyediakan template laporan. Boleh dipakai apa adanya, boleh juga dibuat versi sendiri.
+
+Perhatikan: kita menyimpan hasil `self.summary()` ke variabel `s` terlebih dahulu, lalu menggunakannya dua kali. Ini lebih efisien daripada memanggil `self.summary()` dua kali, karena setiap pemanggilan method membuat string baru.
 
 Struct tetap **boleh override** default method kalau mau perilaku berbeda.
 

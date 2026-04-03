@@ -253,6 +253,11 @@ pub async fn setup_test_app() -> (String, PgPool) {
     // Set JWT_SECRET untuk testing (harus sama dengan yang dipakai di generate_token)
     std::env::set_var("JWT_SECRET", "test-jwt-secret-for-testing");
 
+    // ⚠️ Catatan Rust 2024 Edition: Mulai Rust edition 2024, `std::env::set_var` ditandai sebagai unsafe karena mengubah 
+    // environment variable saat program berjalan bisa menyebabkan data race jika ada thread lain yang membaca env var. 
+    // Untuk kode baru, pertimbangkan menggunakan konfigurasi yang di-pass secara eksplisit. Kalau tetap perlu `set_var`, 
+    // pastikan dipanggil sebelum thread lain dimulai.
+
     // Gunakan TEST_DATABASE_URL dari .env, atau default
     let database_url = std::env::var("TEST_DATABASE_URL")
         .unwrap_or_else(|_| 

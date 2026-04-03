@@ -675,12 +675,14 @@ impl UserRepository {
         Self { pool }
     }
 
-    // Methods dari Bab 25:
+    // ⚠️ Implementasi lengkap method berikut ada di bagian atas bab ini:
     // - find_by_id(id: Uuid) -> Result<Option<User>, AppError>
     // - find_by_email(email: &str) -> Result<Option<User>, AppError>
     // - create(name, email, password, role) -> Result<User, AppError>
     // - delete(id: Uuid) -> Result<bool, AppError>
     // Helper functions: parse_role(&str), format_role(UserRole)
+    //
+    // Salin kode dari penjelasan di atas ke dalam blok impl ini.
 }
 ```
 
@@ -703,11 +705,13 @@ impl TicketRepository {
         Self { pool }
     }
 
-    // Methods dari Bab 25:
+    // ⚠️ Implementasi lengkap method berikut ada di bagian atas bab ini:
     // - find_by_id(id: Uuid) -> Result<Option<Ticket>, AppError>
     // - find_many(customer_id, status, page, limit) -> Result<(Vec<Ticket>, i64), AppError>
     // - create(dto: CreateTicketDto, customer_id) -> Result<Ticket, AppError>
     // - delete(id: Uuid) -> Result<bool, AppError>
+    //
+    // Salin kode dari penjelasan di atas ke dalam blok impl ini.
 }
 ```
 

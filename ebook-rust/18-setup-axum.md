@@ -222,7 +222,6 @@ support-desk/
 
 **Verifikasi:**
 
-**Verifikasi:**
 ```bash
 cargo run
 # Output: "Server berjalan di http://localhost:3000"

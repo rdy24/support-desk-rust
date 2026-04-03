@@ -187,4 +187,4 @@ Kalau dapat error dari borrow checker, baca pesannya, biasanya sudah cukup jelas
 
 ---
 
-Di bab berikutnya kita akan lihat bagaimana konsep ownership dan borrowing bekerja bersama *slice*, cara kita mereferensikan sebagian dari sebuah koleksi data.
+Di bab berikutnya kita akan belajar tentang **Struct dan Method** — cara kita membuat tipe data sendiri dan menambahkan perilaku kepadanya, dengan ownership dan borrowing yang sudah kamu kuasai.

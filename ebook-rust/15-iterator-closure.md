@@ -243,4 +243,4 @@ Bandingkan dengan cara manual pakai loop `for` + `if` + `push`. Iterator jauh le
 
 ---
 
-Bab berikutnya masuk ke **error handling** yang lebih idiomatis di Rust. Bagaimana `Result` dan `?` operator membuat penanganan error bersih tanpa `unwrap()` bertebaran.
+Bab berikutnya masuk ke **Module System** — cara Rust mengorganisir kode menjadi modul, crate, dan file terpisah agar project besar tetap rapi dan maintainable.

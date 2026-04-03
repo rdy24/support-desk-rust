@@ -182,12 +182,20 @@ Tambah Tokio ke `Cargo.toml`, lalu tulis kode berikut di `src/main.rs`:
 Jalankan `proses_ticket` untuk ticket #1, #2, #3 secara sequential. Ukur waktunya dengan `std::time::Instant::now()`. Lalu ubah jadi concurrent dengan `tokio::spawn`. Bandingkan hasilnya.
 
 **Tantangan 2: Simulasi Support Desk**
-Buat async function `assign_ticket(ticket_id: u32, agent_name: &str)` yang:
+Buat async function `assign_ticket(ticket_id: u32, agent_name: String)` yang:
 1. Print "Assigning ticket #{} to {}"
 2. Sleep 200ms (simulasi update database)
 3. Print "Ticket #{} assigned!"
 
 Jalankan assignment untuk 5 ticket bersamaan dengan `tokio::spawn`.
+
+> **Perhatian:** `tokio::spawn` mensyaratkan future yang dikirim harus `Send + 'static`. Artinya, kamu **tidak bisa** meminjam data dari luar (`&str`) ke dalam task yang di-spawn. Karena itu function parameter adalah `String` (owned), bukan `&str` (borrowed). Jika ingin pakai `&str`, clone ke `String` sebelum spawn:
+> ```rust
+> let name = agent_name.to_string();
+> tokio::spawn(async move {
+>     assign_ticket(ticket_id, name).await;
+> });
+> ```
 
 **Tantangan 3 (Bonus):**
 Tambah function `broadcast_update(message: &str)` yang sleep 50ms lalu print pesan. Jalankan broadcast bersamaan dengan beberapa ticket assignments. Amati urutan output, apakah selalu sama?

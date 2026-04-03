@@ -107,6 +107,14 @@ Jargon dulu: **extractor** = tipe khusus yang, ketika kamu taruh di parameter ha
 
 [ILUSTRASI: formulir hotel yang diisi otomatis — tamu cukup menyerahkan KTP, dan formulir langsung terisi nama, alamat, tanggal lahir tanpa perlu diketik manual]
 
+> **Apa itu `json!` macro?**
+> `json!` berasal dari crate `serde_json`. Macro ini memungkinkan kita menulis JSON langsung di dalam kode Rust dengan sintaks yang mirip JSON asli. Hasilnya bertipe `serde_json::Value`. Contoh:
+> ```rust
+> use serde_json::json;
+> let data = json!({ "name": "Budi", "age": 25 });
+> ```
+> Tanpa `json!`, kamu harus membuat `serde_json::Value` secara manual yang jauh lebih verbose.
+
 ### Path\<T\> — Data dari URL
 
 Kalau URL kita ada bagian dinamis seperti `/tickets/{id}`, kita pakai `Path<T>` untuk mengambil nilai `:id`.
@@ -253,6 +261,9 @@ struct TicketFilters {
     status: Option<String>,
     priority: Option<String>,
 }
+
+> **Apa itu `#[serde(default)]`?**
+> Atribut ini memberi tahu Serde: "kalau field ini tidak ada di JSON yang masuk, gunakan nilai default-nya." Untuk `Option<String>`, default-nya adalah `None`. Sebenarnya `Option` sudah otomatis jadi `None` kalau field tidak dikirim, jadi `#[serde(default)]` di sini bersifat redundan tapi tidak salah — anggap saja sebagai dokumentasi eksplisit.
 
 async fn health_check() -> &'static str {
     "OK"

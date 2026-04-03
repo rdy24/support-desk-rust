@@ -345,9 +345,10 @@ pub async fn create_ticket(
 
 Handler hanya tiga langkah:
 1. **Ekstrak** — `State` untuk AppState, `AuthUser` untuk JWT claims, `Json` untuk body
-2. **Validasi** — dto.validate() otomatis dilakukan karena CreateTicketDto derive Validate
-3. **Panggil service** — service menjalankan semua business logic
-4. **Wrap response** — json dengan status code
+2. **Panggil service** — service menjalankan semua business logic (termasuk validasi)
+3. **Wrap response** — json dengan status code
+
+> **Catatan penting:** `derive(Validate)` pada `CreateTicketDto` hanya menambahkan method `.validate()` ke struct. Validasi **tidak** otomatis terjadi saat deserialisasi. Kamu harus panggil `dto.validate()` secara eksplisit — seperti yang dilakukan di service layer (`ticket_service.create()`), atau langsung di handler sebelum memanggil service. Lihat Bab 21 dan Bab 27 untuk contoh pemanggilan `.validate()`.
 
 **Tidak ada** `if role == "customer"` di sini. Semua aturan sudah di service.
 

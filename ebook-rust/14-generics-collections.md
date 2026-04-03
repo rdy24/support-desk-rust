@@ -171,7 +171,7 @@ let count = status_count.entry("open".to_string()).or_insert(0);
 *count += 1;
 ```
 
-`.entry(key)` cek apakah key ada. `.or_insert(0)` memasukkan nilai 0 kalau belum ada. `*count += 1` menambah nilainya. Tanda `*` untuk *dereference*, karena `count` adalah referensi.
+`.entry(key)` cek apakah key ada. `.or_insert(0)` memasukkan nilai 0 kalau belum ada. `*count += 1` menambah nilainya. Tanda `*` untuk *dereference*, karena `count` adalah referensi (`&mut i32`), bukan nilai langsung. Bayangkan `count` seperti alamat rumah — `*count` artinya "isi rumah di alamat ini". Kita perlu `*` untuk mengubah isi, bukan alamatnya.
 
 ---
 
@@ -223,6 +223,9 @@ fn main() {
         .filter(|t| t.status == "open")
         .collect();
     println!("Ticket terbuka: {}", open_tickets.len());
+
+    // ⚠️ Catatan: .iter(), .filter(), dan .collect() adalah bagian dari *iterator pattern* yang akan dibahas detail di Bab 15. 
+    // Untuk sekarang, cukup pahami bahwa ini adalah cara idiomatis Rust untuk memproses koleksi data.
 
     // Hitung ticket per status dengan HashMap
     let mut ticket_count_by_status: HashMap<String, u32> = HashMap::new();

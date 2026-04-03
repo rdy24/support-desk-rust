@@ -171,7 +171,7 @@ fn categorize_priority(score: u8) -> (&'static str, bool) {
 }
 ```
 
-Return type-nya `(&'static str, bool)`, tuple berisi dua nilai: label prioritas dan status urgent. `&'static str` artinya string yang "hidup seumur program", cocok untuk string literal yang kita tulis langsung di kode. Lifetime dibahas lebih dalam di bab berikutnya.
+Return type-nya `(&'static str, bool)`, tuple berisi dua nilai: label prioritas dan status urgent. `&'static str` artinya string yang "hidup seumur program", cocok untuk string literal yang kita tulis langsung di kode. Lifetime dibahas lebih dalam di bab-bab selanjutnya.
 
 Untuk menggunakan hasilnya, kita bisa *destructure* tuple:
 

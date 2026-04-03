@@ -107,7 +107,7 @@ impl AuthService {
 }
 ```
 
-`AuthService::new` menerima `UserRepository` sebagai argumen, yaitu **dependency injection**. Service tidak membuat repo sendiri; dia menerima dari luar. Itulah kenapa mudah diganti saat testing.
+`AuthService::new` menerima `UserRepository` sebagai argumen, yaitu **dependency injection** (penyuntikan dependensi). Service tidak membuat repo sendiri; dia menerima dari luar. Itulah kenapa mudah diganti saat testing.
 
 Catat: `#[derive(Clone)]` di struct. Karena `AuthService` akan disimpan di `AppState` (yang juga derive `Clone`), service ini harus Clone-able juga.
 

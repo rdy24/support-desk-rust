@@ -217,4 +217,4 @@ Konteks yang tepat untuk `panic!`: kondisi yang menandakan *bug di kode kamu sen
 
 ---
 
-Dengan ini kamu sudah paham cara Rust memaksa kamu berpikir tentang error sejak awal. Itulah kenapa kode Rust cenderung lebih robust: compiler tidak biarkan kamu mengabaikan kemungkinan gagal. Di bab berikutnya kita masuk ke trait dan generics, fondasi untuk menulis kode yang fleksibel dan reusable.
+Dengan ini kamu sudah paham cara Rust memaksa kamu berpikir tentang error sejak awal. Itulah kenapa kode Rust cenderung lebih robust: compiler tidak biarkan kamu mengabaikan kemungkinan gagal. Di bab berikutnya kita masuk ke **traits**, fondasi untuk menulis kode yang fleksibel dan reusable.

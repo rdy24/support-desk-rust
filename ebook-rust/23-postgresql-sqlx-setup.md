@@ -221,39 +221,23 @@ docker ps
 
 Harus muncul container `support-desk-db` dengan status `Up`.
 
-### Buat Database
+### Database Otomatis Ter-create
 
-Container sudah jalan, tapi **database `support_desk` belum ter-create**. Harus dibuat secara manual.
-
-Masuk ke PostgreSQL container dan buat database:
-
-```bash
-docker exec -it support-desk-db psql -U postgres
-```
-
-Kamu akan masuk ke `psql` prompt. Sekarang buat database:
-
-```sql
-CREATE DATABASE support_desk;
-```
+Karena kita sudah set `POSTGRES_DB: support_desk` di `docker-compose.yml`, image resmi PostgreSQL akan **otomatis membuat database `support_desk`** saat container pertama kali dijalankan (inisialisasi awal).
 
 Verifikasi database sudah ada:
 
-```sql
-\l
-```
-
-Harus ada database `support_desk` dalam list. Keluar:
-
-```sql
-\q
-```
-
-**Atau** (cara cepat tanpa masuk psql):
-
 ```bash
-docker exec -it support-desk-db createdb -U postgres support_desk
+docker exec -it support-desk-db psql -U postgres -c "\l"
 ```
+
+Harus ada database `support_desk` dalam list.
+
+> **Catatan:** `POSTGRES_DB` hanya berefek saat **inisialisasi pertama** (saat volume masih kosong). Kalau kamu sudah pernah menjalankan container sebelumnya tanpa `POSTGRES_DB`, kamu perlu hapus volume dulu (`docker compose down -v`) lalu jalankan ulang, atau buat database manual:
+>
+> ```bash
+> docker exec -it support-desk-db createdb -U postgres support_desk
+> ```
 
 Selesai! Database `support_desk` sudah siap. Tables akan dibuat di Bab 24 via migrations.
 

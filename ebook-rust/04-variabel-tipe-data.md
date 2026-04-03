@@ -133,7 +133,7 @@ Bedakan dengan teks (*string*) yang pakai kutip ganda `"`, itu bab tersendiri.
 Kamu tidak selalu harus tulis tipenya. Rust cukup cerdas untuk **menebak tipe** dari nilai yang dimasukkan, fitur ini disebut *type inference*.
 
 ```rust
-let title = "Login tidak bisa";  // Rust tahu ini &str (teks)
+let title = "Login tidak bisa";  // Rust tahu ini &str (teks, dibahas detail di Bab 05)
 let jumlah = 10;                 // Rust tahu ini i32
 let aktif = true;                // Rust tahu ini bool
 ```
@@ -153,7 +153,7 @@ Konstanta adalah nilai yang **benar-benar tidak pernah berubah sepanjang program
 
 ```rust
 const MAX_TICKETS: u32 = 1000;
-const APP_NAME: &str = "Support Desk";
+const APP_NAME: &str = "Support Desk";  // &str = tipe string pinjaman (dibahas di Bab 05)
 ```
 
 Konstanta cocok untuk nilai konfigurasi yang tidak boleh berubah: batas maksimal tiket, nama aplikasi, dan sejenisnya.

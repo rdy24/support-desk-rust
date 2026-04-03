@@ -6,6 +6,16 @@ Di JavaScript atau Python, string itu simpel, tinggal pakai, selesai. Di Rust, a
 
 Alasannya: Rust sangat peduli soal **siapa yang "punya" data** dan **di mana data itu disimpan di memori**. Bukan kerumitan tanpa alasan, justru inilah yang bikin program Rust cepat dan aman.
 
+### Stack dan Heap: Dua Gudang Memori
+
+Sebelum masuk ke dua jenis string, kamu perlu tahu dua tempat penyimpanan data di memori komputer:
+
+**Stack** itu seperti tumpukan piring di kantin — cepat, rapi, tapi ukurannya terbatas dan harus ditumpuk sesuai urutan. Data yang ukurannya sudah diketahui saat kompilasi (angka, boolean, pointer) disimpan di sini. Menyimpan dan mengambil data dari stack sangat cepat.
+
+**Heap** itu seperti gudang besar — lebih lambat untuk diakses, tapi bisa menyimpan data dengan ukuran yang baru diketahui saat program berjalan (misalnya teks yang diketik user). Data di heap diakses lewat pointer (alamat) yang disimpan di stack.
+
+Kenapa ini penting? Karena di Rust, `&str` dan `String` berbeda justru karena **di mana datanya disimpan** dan **siapa yang bertanggung jawab** atas memori tersebut.
+
 [ILUSTRASI: dua meja kerja — satu meja ada tumpukan fotokopi dokumen bertulisan "&str", meja lain ada satu dokumen asli bertulisan "String". Orang di meja fotokopi hanya bisa baca, orang di meja dokumen asli bisa coret-coret]
 
 ---

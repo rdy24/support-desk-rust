@@ -141,6 +141,16 @@ Rust semakin populer di dunia embedded, yaitu mikrokontroler, IoT, firmware.
 
 ---
 
+## Kode Sumber Lengkap
+
+Seluruh kode yang dibangun dalam ebook ini tersedia di repository GitHub:
+
+[https://github.com/raflizar/support-desk-rust](https://github.com/raflizar/support-desk-rust)
+
+Gunakan sebagai referensi kalau ada kode yang kurang jelas atau ingin membandingkan hasil pekerjaanmu dengan implementasi lengkap. Repository ini juga bisa menjadi starting point untuk eksperimen dan pengembangan lebih lanjut.
+
+---
+
 ## Sumber Belajar Lanjutan
 
 Perjalanan belajar Rust tidak berhenti di sini. Berikut sumber-sumber yang worth your time:

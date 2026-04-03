@@ -383,7 +383,7 @@ curl http://localhost:3000/me \
 curl -X POST http://localhost:3000/tickets \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <TOKEN_KAMU>" \
-  -d '{"title":"Tidak bisa login","description":"Saya tidak bisa masuk ke akun saya"}'
+  -d '{"subject":"Tidak bisa login","description":"Saya tidak bisa masuk ke akun saya","category":"account","priority":"high"}'
 ```
 
 ### 6. Lihat semua ticket

@@ -82,3 +82,29 @@ Kode di Fase 2 (Bab 18-32) bersifat **kumulatif** — kode Bab 19 menggunakan ha
 - Semangat belajar
 
 Tidak perlu pengalaman Rust sebelumnya. 🦀
+
+---
+
+## Glosarium Istilah
+
+| Istilah | Penjelasan |
+|---------|------------|
+| **trait** | Kontrak perilaku yang bisa diimplementasikan oleh berbagai tipe (mirip interface di bahasa lain) |
+| **struct** | Tipe data kustom yang mengelompokkan beberapa field menjadi satu kesatuan |
+| **enum** | Tipe data yang nilainya bisa salah satu dari beberapa varian |
+| **ownership** | Sistem kepemilikan data di Rust — setiap nilai hanya punya satu pemilik |
+| **borrowing** | Meminjam referensi ke data tanpa mengambil kepemilikan |
+| **lifetime** | Anotasi yang memberi tahu compiler berapa lama referensi valid |
+| **heap** | Area memori untuk data berukuran dinamis, diakses lewat pointer |
+| **stack** | Area memori untuk data berukuran tetap, cepat dan otomatis dibersihkan |
+| **macro** | Kode yang menghasilkan kode lain saat kompilasi (ditandai dengan `!`, contoh: `println!`) |
+| **crate** | Unit kompilasi dan distribusi paket di Rust (seperti package/library) |
+| **module** | Cara mengorganisir kode dalam satu crate menjadi bagian-bagian terpisah |
+| **async** | Pemrograman asinkron — menjalankan tugas tanpa memblokir thread |
+| **extractor** | Mekanisme Axum untuk mengambil data dari HTTP request (Path, Query, Json, State) |
+| **middleware** | Kode yang berjalan sebelum/sesudah handler, untuk autentikasi, logging, dll |
+| **DTO** | Data Transfer Object — struct khusus untuk menerima/mengirim data antar layer |
+| **repository** | Layer yang bertanggung jawab langsung berkomunikasi dengan database |
+| **service** | Layer yang berisi business logic, menjembatani handler dan repository |
+| **migration** | Perubahan skema database yang dikelola secara terurut dan reversible |
+| **pool** | Kumpulan koneksi database yang dipakai ulang untuk efisiensi |
