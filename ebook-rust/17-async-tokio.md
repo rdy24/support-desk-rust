@@ -161,7 +161,7 @@ Web API hampir semuanya bekerja dengan nunggu I/O: user kirim request, kita quer
 
 Kalau semua ini sinkronus, server hanya bisa menangani **1 request sekaligus**. Dengan async, server bisa menangani **ribuan request bersamaan** dengan resource yang sama.
 
-Framework Elysia yang dipakai di project TypeScript bekerja dengan prinsip yang sama. Axum, web framework Rust yang populer, dibangun di atas Tokio. Pemahaman soal `async`/`.await` dan `tokio::spawn` langsung kepake ketika migrasi ke Rust nanti.
+Axum, web framework Rust yang akan kita pakai di Fase 2, dibangun di atas Tokio. Pemahaman soal `async`/`.await` dan `tokio::spawn` yang kita pelajari di sini akan langsung terpakai saat membangun Support Desk API nanti.
 
 [ILUSTRASI: Diagram: User requests masuk ke server → async handler memproses bersamaan → responses keluar]
 

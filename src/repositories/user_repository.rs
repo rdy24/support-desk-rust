@@ -120,8 +120,13 @@ impl UserRepository {
         })
     }
 
-    /// Dapatkan semua users dengan pagination
-    pub async fn find_all(&self, page: i64, limit: i64) -> Result<(Vec<User>, i64), AppError> {
+    /// Dapatkan semua users dengan pagination dan optional role filter
+    pub async fn find_all(
+        &self,
+        role: Option<&str>,
+        page: i64,
+        limit: i64,
+    ) -> Result<(Vec<User>, i64), AppError> {
         #[derive(sqlx::FromRow)]
         struct UserRow {
             id: Uuid,
@@ -135,14 +140,25 @@ impl UserRepository {
 
         let offset = (page - 1) * limit;
 
-        let rows = sqlx::query_as::<_, UserRow>(
+        // Build query dengan optional role filter
+        let query_str = if role.is_some() {
+            "SELECT id, name, email, password, role::text, created_at, updated_at FROM users WHERE role::text = $3 ORDER BY created_at DESC LIMIT $1 OFFSET $2"
+        } else {
             "SELECT id, name, email, password, role::text, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2"
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        };
+
+        let mut query = sqlx::query_as::<_, UserRow>(query_str)
+            .bind(limit)
+            .bind(offset);
+
+        if let Some(r) = role {
+            query = query.bind(r);
+        }
+
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let users = rows.into_iter().map(|r| User {
             id: r.id,
@@ -154,12 +170,93 @@ impl UserRepository {
             updated_at: r.updated_at,
         }).collect();
 
-        let total: i64 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
+        // Count total dengan optional role filter
+        let count_query_str = if role.is_some() {
+            "SELECT COUNT(*) FROM users WHERE role::text = $1"
+        } else {
+            "SELECT COUNT(*) FROM users"
+        };
+
+        let mut count_query = sqlx::query_scalar::<_, i64>(count_query_str);
+
+        if let Some(r) = role {
+            count_query = count_query.bind(r);
+        }
+
+        let total = count_query
             .fetch_one(&self.pool)
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         Ok((users, total))
+    }
+
+    /// Update user
+    pub async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        role: Option<&str>,
+    ) -> Result<Option<User>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct UserRow {
+            id: Uuid,
+            name: String,
+            email: String,
+            password: String,
+            role: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let mut updates = Vec::new();
+        let mut bindings: Vec<String> = Vec::new();
+        let mut param_count = 2; // Start at 2 because $1 is id
+
+        if name.is_some() {
+            updates.push(format!("name = ${}", param_count));
+            bindings.push(name.unwrap().to_string());
+            param_count += 1;
+        }
+
+        if role.is_some() {
+            updates.push(format!("role = ${}::user_role", param_count));
+            bindings.push(role.unwrap().to_string());
+            param_count += 1;
+        }
+
+        // Jika tidak ada field yang diupdate, return existing user
+        if updates.is_empty() {
+            return self.find_by_id(id).await;
+        }
+
+        updates.push("updated_at = NOW()".to_string());
+
+        let query_str = format!(
+            "UPDATE users SET {} WHERE id = $1 RETURNING id, name, email, password, role::text, created_at, updated_at",
+            updates.join(", ")
+        );
+
+        let mut query = sqlx::query_as::<_, UserRow>(&query_str).bind(id);
+
+        for binding in bindings {
+            query = query.bind(binding);
+        }
+
+        let row = query
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(row.map(|r| User {
+            id: r.id,
+            name: r.name,
+            email: r.email,
+            password: r.password,
+            role: parse_role(&r.role).unwrap_or(UserRole::Customer),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }))
     }
 
     /// Hapus user berdasarkan ID

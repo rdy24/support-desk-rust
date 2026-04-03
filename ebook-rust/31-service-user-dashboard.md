@@ -1,118 +1,117 @@
 # Bab 31: Service Layer — User dan Dashboard
 
-Auth sudah berjalan. Sekarang saatnya bangun bagian yang mengurus **siapa saja yang ada di sistem** dan **bagaimana kondisi sistem secara keseluruhan**.
+Auth sudah berjalan. Ticket juga bisa dibuat dan dikelola. Sekarang saatnya bangun bagian yang mengurus **siapa saja yang ada di sistem** dan **bagaimana kondisi sistem secara keseluruhan**.
 
 ---
 
 ## Analogi: HRD dan Bagian Pelaporan
 
-Bayangkan sebuah perusahaan dengan dua divisi yang berbeda tugas. **HRD** mengurus data karyawan: siapa yang masuk, siapa yang keluar, update jabatan, lihat profil. **Bagian Pelaporan** tugasnya cuma satu: bikin laporan bulanan, berapa tiket masuk, berapa yang selesai, berapa yang masih pending.
+Bayangkan perusahaan dengan dua divisi. **HRD** mengurus data karyawan: siapa masuk, siapa keluar, update jabatan, lihat profil. **Pelaporan** cuma bikin laporan: berapa tiket, berapa selesai, berapa pending.
 
-HRD tidak ikut campur laporan. Bagian pelaporan tidak ikut campur data karyawan. Keduanya punya *sumber data sendiri* (repository) dan *staf sendiri* (service).
+HRD nggak ikut campur laporan. Pelaporan nggak ikut campur data karyawan. Keduanya punya sumber data sendiri dan staff sendiri.
 
-Itulah `UserService` dan `DashboardService` di bab ini.
+Itulah `UserService` dan `DashboardService`.
 
-[ILUSTRASI: dua gedung kantor terpisah — satu bertulis "HRD / UserService" dan satu "Pelaporan / DashboardService", keduanya terhubung ke "Database" di tengah]
-
----
-
-## Kunci Jawaban & State Sebelumnya
-
-**Kunci Jawaban Latihan Bab 30:**
-- TicketService dengan business logic (owner validation, status transitions) sudah lengkap di "Hasil Akhir Bab 30"
-- ResponseService untuk ticket responses juga sudah ada
-
-**State Sebelumnya:**
-Dari Bab 30, service layer untuk ticket sudah lengkap dengan validasi business logic. Bab 31 tambah UserService dan DashboardService untuk mengelola users dan metrics.
+[ILUSTRASI: dua gedung kantor terpisah — satu "HRD / UserService", satu "Pelaporan / DashboardService", keduanya terhubung ke "Database"]
 
 ---
 
-## UserService
-
-`UserService` adalah "HRD"-nya aplikasi kita. Dia menerima permintaan dari handler, lalu meneruskannya ke `UserRepository` untuk berurusan dengan database.
+## UserService: Mengelola Data User
 
 ```rust
+#[derive(Clone)]
 pub struct UserService {
     user_repo: UserRepository,
 }
-```
 
-Dependency injection sederhana: `UserService` membawa `UserRepository` sebagai "anak buah"-nya.
+impl UserService {
+    pub fn new(user_repo: UserRepository) -> Self {
+        Self { user_repo }
+    }
+}
+```
 
 ---
 
-### get_me — Profil Sendiri
-
-Endpoint `GET /users/me` memungkinkan user melihat profilnya sendiri berdasarkan token JWT yang dia kirim.
+### get_me: Profil Sendiri
 
 ```rust
 pub async fn get_me(&self, claims: &Claims) -> Result<User, AppError> {
     let user_id = Uuid::parse_str(&claims.sub)
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid user id")))?;
+        .map_err(|_| AppError::Internal("Invalid user id".to_string()))?;
 
-    self.user_repo.find_by_id(user_id).await?
+    self.user_repo
+        .find_by_id(user_id)
+        .await?
         .ok_or_else(|| AppError::NotFound("User tidak ditemukan".to_string()))
 }
 ```
 
-`claims.sub` berisi user ID dalam bentuk string dari JWT, lalu diparse jadi `Uuid`. Kalau parsing gagal, itu error internal yang seharusnya tidak terjadi kalau token valid. Setelah itu user dicari di database. Kalau tidak ada, return `NotFound`.
-
-`ok_or_else` adalah idiom Rust untuk mengubah `Option<T>` jadi `Result<T, E>`. Kalau `Option` bernilai `None`, jalankan closure untuk buat error.
+`claims.sub` adalah user ID dalam JWT. Parse jadi Uuid, lalu cari di database.
 
 ---
 
-### get_all — List dengan Filter Role
-
-Admin bisa lihat semua user, dengan opsi filter berdasarkan role dan pagination.
+### get_all: List dengan Optional Role Filter
 
 ```rust
-pub async fn get_all(&self, role: Option<&str>, page: i64, limit: i64) -> Result<(Vec<User>, i64), AppError> {
+pub async fn get_all(
+    &self,
+    role: Option<&str>,
+    page: i64,
+    limit: i64,
+) -> Result<(Vec<User>, i64), AppError> {
     self.user_repo.find_all(role, page, limit).await
 }
 ```
 
-`Option<&str>` untuk `role` artinya filter ini opsional. Kalau tidak dikirim, tampilkan semua. Return type `(Vec<User>, i64)` adalah tuple: list user plus total count untuk pagination. Method ini dipakai oleh tiga endpoint sekaligus: `GET /agents` dengan filter role `"agent"`, `GET /customers` dengan filter role `"customer"`, dan `GET /users` yang bisa tanpa filter atau dengan query param.
+Untuk admin: filter role opsional, bisa filter "agent" atau "customer".
 
 ---
 
-### get_by_id
-
-Admin bisa lihat detail satu user berdasarkan ID.
+### get_by_id dan get_all: Simple Pass-through
 
 ```rust
 pub async fn get_by_id(&self, user_id: Uuid) -> Result<User, AppError> {
-    self.user_repo.find_by_id(user_id).await?
+    self.user_repo
+        .find_by_id(user_id)
+        .await?
         .ok_or_else(|| AppError::NotFound("User tidak ditemukan".to_string()))
 }
 ```
 
-Sama polanya dengan `get_me`, bedanya ID langsung diterima dari path parameter, bukan dari JWT claims.
-
 ---
 
-### update
-
-Admin bisa update data user: nama, email, role, dll.
+### update: Update User
 
 ```rust
 pub async fn update(&self, user_id: Uuid, dto: UpdateUserDto) -> Result<User, AppError> {
-    self.user_repo.update(user_id, &dto).await?
+    // Cek apakah ada field yang diupdate
+    if dto.name.is_none() && dto.role.is_none() {
+        return Err(AppError::BadRequest(
+            "Tidak ada field yang diupdate".to_string(),
+        ));
+    }
+
+    self.user_repo
+        .update(user_id, dto.name.as_deref(), dto.role.as_deref())
+        .await?
         .ok_or_else(|| AppError::NotFound("User tidak ditemukan".to_string()))
 }
 ```
 
-`UpdateUserDto` (Data Transfer Object) adalah struct yang berisi field-field yang boleh diupdate. Itulah kenapa pakai DTO terpisah, bukan langsung struct `User`, karena kita tidak mau semua field bisa diubah sembarangan. Misalnya `created_at` atau `password` tidak boleh diubah lewat endpoint ini.
+`UpdateUserDto` hanya punya field yang boleh diupdate: name dan role (optional).
 
 ---
 
-### delete — Tidak Boleh Hapus Diri Sendiri
-
-Ada aturan bisnis khusus di sini: **admin tidak boleh menghapus akunnya sendiri**.
+### delete: Tidak Boleh Hapus Diri Sendiri
 
 ```rust
-pub async fn delete(&self, target_id: Uuid, requester_claims: &Claims) -> Result<(), AppError> {
-    if target_id.to_string() == requester_claims.sub {
-        return Err(AppError::Forbidden("Tidak bisa menghapus akun sendiri".to_string()));
+pub async fn delete(&self, target_id: Uuid, claims: &Claims) -> Result<(), AppError> {
+    // Tidak boleh menghapus diri sendiri
+    if target_id.to_string() == claims.sub {
+        return Err(AppError::Forbidden(
+            "Tidak bisa menghapus akun sendiri".to_string(),
+        ));
     }
 
     self.user_repo.delete(target_id).await?;
@@ -120,100 +119,237 @@ pub async fn delete(&self, target_id: Uuid, requester_claims: &Claims) -> Result
 }
 ```
 
-Logikanya: bandingkan `target_id` (siapa yang mau dihapus) dengan `requester_claims.sub` (siapa yang meminta). Kalau sama, tolak dengan `403 Forbidden`. Logika ini ada di service karena ini aturan bisnis, bukan urusan HTTP.
-
-[ILUSTRASI: diagram alur delete — "Apakah target_id == requester_id?" → Ya → Return Forbidden → Tidak → Hapus dari database]
+Aturan bisnis: bandingkan `target_id` dengan `claims.sub`. Kalau sama, tolak.
 
 ---
 
-## DashboardService
-
-"Bagian Pelaporan"-nya aplikasi kita. Tugasnya satu.
+## DashboardService: Statistics
 
 ```rust
+#[derive(Clone)]
 pub struct DashboardService {
     dashboard_repo: DashboardRepository,
 }
 
 impl DashboardService {
+    pub fn new(dashboard_repo: DashboardRepository) -> Self {
+        Self { dashboard_repo }
+    }
+
     pub async fn get_stats(&self) -> Result<DashboardStats, AppError> {
         self.dashboard_repo.get_stats().await
     }
 }
 ```
 
-`DashboardStats` adalah struct yang berisi angka-angka statistik: total tiket, tiket open, tiket closed, total user, dll. Semua angka itu dikumpulkan oleh `DashboardRepository` lewat query agregasi ke database.
-
-`DashboardRepository` dipisah sendiri karena query statistik biasanya kompleks, dengan banyak `COUNT`, `GROUP BY`, dan join beberapa tabel. Lebih bersih dibanding mencampurnya ke `UserRepository` atau `TicketRepository`.
+Sederhana: aggregate semua statistik dari repository.
 
 ---
 
-## UserHandler dan DashboardHandler
+## Handlers: Free Functions
 
-Handler adalah "resepsionis" yang menerima request HTTP, validasi, lalu teruskan ke service.
-
-Struktur `UserHandler`:
+Pattern yang sama dari Ch30: State extractor, role-based extractors, service calls.
 
 ```rust
-pub struct UserHandler {
-    user_service: UserService,
+pub async fn get_me(
+    State(state): State<AppState>,
+    AuthUser(claims): AuthUser,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = state.user_service.get_me(&claims).await?;
+    Ok(Json(json!({
+        "success": true,
+        "data": user
+    })))
 }
 
-impl UserHandler {
-    // GET /users/me
-    pub async fn get_me(&self, claims: Claims) -> impl IntoResponse { ... }
+pub async fn get_all_users(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Query(filters): Query<UserFilters>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (users, total) = state
+        .user_service
+        .get_all(None, filters.page.unwrap_or(1) as i64, filters.limit.unwrap_or(10) as i64)
+        .await?;
 
-    // GET /agents
-    pub async fn get_agents(&self, query: Query<PaginationQuery>) -> impl IntoResponse { ... }
+    Ok(Json(json!({
+        "success": true,
+        "data": users,
+        "total": total
+    })))
+}
 
-    // GET /customers
-    pub async fn get_customers(&self, query: Query<PaginationQuery>) -> impl IntoResponse { ... }
+pub async fn get_agents(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Query(filters): Query<UserFilters>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (agents, total) = state
+        .user_service
+        .get_all(Some("agent"), filters.page.unwrap_or(1) as i64, filters.limit.unwrap_or(10) as i64)
+        .await?;
 
-    // GET /users
-    pub async fn get_all(&self, query: Query<UserFilterQuery>) -> impl IntoResponse { ... }
+    Ok(Json(json!({
+        "success": true,
+        "data": agents,
+        "total": total
+    })))
+}
 
-    // GET /users/{id}
-    pub async fn get_by_id(&self, Path(id): Path<Uuid>) -> impl IntoResponse { ... }
+pub async fn get_customers(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Query(filters): Query<UserFilters>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (customers, total) = state
+        .user_service
+        .get_all(Some("customer"), filters.page.unwrap_or(1) as i64, filters.limit.unwrap_or(10) as i64)
+        .await?;
 
-    // PATCH /users/{id}
-    pub async fn update(&self, Path(id): Path<Uuid>, Json(dto): Json<UpdateUserDto>) -> impl IntoResponse { ... }
+    Ok(Json(json!({
+        "success": true,
+        "data": customers,
+        "total": total
+    })))
+}
 
-    // DELETE /users/{id}
-    pub async fn delete(&self, Path(id): Path<Uuid>, claims: Claims) -> impl IntoResponse { ... }
+pub async fn get_user(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = state.user_service.get_by_id(user_id).await?;
+    Ok(Json(json!({
+        "success": true,
+        "data": user
+    })))
+}
+
+pub async fn update_user(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Path(user_id): Path<Uuid>,
+    Json(dto): Json<UpdateUserDto>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = state.user_service.update(user_id, dto).await?;
+    Ok(Json(json!({
+        "success": true,
+        "data": user
+    })))
+}
+
+pub async fn delete_user(
+    State(state): State<AppState>,
+    AdminOnly(claims): AdminOnly,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.user_service.delete(user_id, &claims).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_stats(
+    State(state): State<AppState>,
+    AdminOrAgent(claims): AdminOrAgent,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let stats = state.dashboard_service.get_stats().await?;
+    Ok(Json(json!({
+        "success": true,
+        "data": stats
+    })))
 }
 ```
-
-Dan `DashboardHandler`:
-
-```rust
-pub struct DashboardHandler {
-    dashboard_service: DashboardService,
-}
-
-impl DashboardHandler {
-    // GET /dashboard/stats
-    pub async fn get_stats(&self) -> impl IntoResponse { ... }
-}
-```
-
-Setiap handler method mengikuti pola yang sama: terima parameter dari request (path, query, body, claims), panggil method service yang sesuai, lalu return response JSON kalau sukses. Kalau error, `AppError` otomatis dikonversi ke HTTP response yang tepat.
 
 ---
 
-## Siap untuk Bab 32!
+## Tabel Endpoint
 
-Semua piece sudah ada: `UserRepository` dan `DashboardRepository` untuk urusan database, `UserService` dan `DashboardService` untuk logika bisnis, serta `UserHandler` dan `DashboardHandler` untuk urusan HTTP.
-
-Yang belum: **menghubungkan semuanya jadi satu Router Axum yang utuh**. Di bab 32, kita akan buat router lengkap yang mendaftarkan semua endpoint, memasang middleware autentikasi di tempat yang tepat, dan merangkai semua dependency dari handler sampai repository.
+| Endpoint | Method | Role | Service |
+|---|---|---|---|
+| `/me` | GET | AuthUser | get_me() |
+| `/users` | GET | AdminOnly | get_all(None) |
+| `/users/:id` | GET | AdminOnly | get_by_id() |
+| `/users/:id` | PATCH | AdminOnly | update() |
+| `/users/:id` | DELETE | AdminOnly | delete() |
+| `/agents` | GET | AdminOnly | get_all("agent") |
+| `/customers` | GET | AdminOnly | get_all("customer") |
+| `/dashboard/stats` | GET | AdminOrAgent | get_stats() |
 
 ---
 
 ## Latihan
 
-1. **Buat struct `UserService`** dengan field `user_repo: UserRepository`. Implementasikan method `get_me` dan `get_by_id`. Pastikan keduanya mengembalikan `AppError::NotFound` kalau user tidak ada.
+1. Test `/me` endpoint dengan valid token customer
+2. Test `/users` endpoint dengan admin token
+3. Test `/users/:id` DELETE dengan admin, coba delete diri sendiri (harus 403 Forbidden)
+4. Test role filter: `/agents` vs `/customers` vs `/users`
 
-2. **Tambahkan validasi di `update`**: sebelum memanggil repository, cek apakah `dto` punya minimal satu field yang tidak `None`. Kalau semua field `None` (tidak ada yang diubah), return `AppError::BadRequest("Tidak ada field yang diupdate".to_string())`.
+---
 
-3. **Tulis test untuk `delete`**: buat dua skenario. Pertama, hapus user yang berbeda ID (harus sukses). Kedua, hapus dengan `target_id` sama dengan `requester_claims.sub` (harus return `AppError::Forbidden`).
+## Hasil Akhir
 
-4. **Eksplorasi**: `DashboardService` sangat sederhana karena semua logika ada di repository. Menurut kamu, kapan lebih baik menaruh logika di service vs langsung di repository? Tulis pendapatmu dalam komentar kode.
+### Step 1: `src/repositories/user_repository.rs` — Update find_all, add update
+
+Modified `find_all()` signature:
+```rust
+pub async fn find_all(
+    &self,
+    role: Option<&str>,
+    page: i64,
+    limit: i64,
+) -> Result<(Vec<User>, i64), AppError>
+```
+
+Added `update()` method with dynamic SQL.
+
+### Step 2: `src/dto/user_dto.rs` — Add UpdateUserDto, UserFilters
+
+```rust
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserDto {
+    pub name: Option<String>,
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserFilters {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
+```
+
+### Step 3: `src/services/user_service.rs` — NEW
+
+With methods: `get_me()`, `get_all()`, `get_by_id()`, `update()`, `delete()`
+
+### Step 4: `src/services/dashboard_service.rs` — NEW
+
+With method: `get_stats()`
+
+### Step 5: `src/services/mod.rs` — Update
+
+```rust
+pub mod user_service;
+pub mod dashboard_service;
+pub use user_service::UserService;
+pub use dashboard_service::DashboardService;
+```
+
+### Step 6: `src/handlers/user_handler.rs` — NEW
+
+7 free function handlers
+
+### Step 7: `src/handlers/dashboard_handler.rs` — NEW
+
+1 handler: `get_stats()`
+
+### Step 8: `src/handlers/mod.rs` — Update
+
+Add module declarations
+
+### Step 9: `src/main.rs` — Update
+
+- Add `user_service` and `dashboard_service` to AppState
+- Initialize in AppState::new()
+- Add all routes (7 user routes + 1 dashboard route)
+
+✅ `cargo build` → 0 errors

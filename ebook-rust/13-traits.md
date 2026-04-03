@@ -45,7 +45,9 @@ trait Summarize {
     fn summary(&self) -> String;
 
     fn short_summary(&self) -> String {
-        format!("{}...", &self.summary()[..50.min(self.summary().len())])
+        let s = self.summary();
+        let end = 50.min(s.len());
+        format!("{}...", &s[..end])
     }
 }
 
@@ -241,7 +243,9 @@ trait Summarize {
     fn summary(&self) -> String;
 
     fn short_summary(&self) -> String {
-        format!("{}...", &self.summary()[..50.min(self.summary().len())])
+        let s = self.summary();
+        let end = 50.min(s.len());
+        format!("{}...", &s[..end])
     }
 }
 

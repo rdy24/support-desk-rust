@@ -35,3 +35,18 @@ fn validate_role(role: &str) -> Result<(), validator::ValidationError> {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserFilters {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
