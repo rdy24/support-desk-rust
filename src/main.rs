@@ -1,5 +1,6 @@
 mod models;
 mod dto;
+mod common;
 
 use axum::{
     extract::{Path, Query},

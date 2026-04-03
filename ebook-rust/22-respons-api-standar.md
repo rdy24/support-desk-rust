@@ -303,7 +303,9 @@ Konsisten, predictable, mudah di-handle di frontend.
 
 Tiap handler Axum harus return sesuatu yang implement `IntoResponse`. Axum sudah bawaan support beberapa tipe: `String`, `StatusCode`, tuple `(StatusCode, Json<T>)`, dan lainnya.
 
-Supaya `ApiResponse<T>` bisa langsung di-return dari handler tanpa wrap manual, caranya sederhana: implement `IntoResponse` untuk `ApiResponse<T>`.
+Supaya `ApiResponse<T>` bisa langsung di-return dari handler tanpa wrap manual, caranya sederhana: **implement `IntoResponse` untuk `ApiResponse<T>`**.
+
+Analogi: Kalau mau kirim paket ke luar negeri, paket harus di-pack dengan format standar (bungkus dengan plastik, label, dll). Begitu juga response harus di-"pack" jadi format HTTP response yang Axum mengerti. `IntoResponse` adalah packer-nya.
 
 ---
 
@@ -313,18 +315,27 @@ Kita akan membuat file baru di folder `src/common/` untuk mengelola semua respon
 
 ```
 src/
-├── common/
-│   ├── mod.rs         ← pub use semua response types
-│   └── response.rs    ← ApiResponse, PaginatedResponse, AppError, AppResult
+├── common/              ← NEW FOLDER
+│   ├── mod.rs          ← pub use semua response types
+│   └── response.rs     ← ApiResponse, PaginatedResponse, AppError, AppResult
+├── models/
+├── dto/
 └── main.rs
 ```
 
-Buat folder `src/common/` terlebih dahulu, kemudian buat file `src/common/response.rs`:
+**Langkah 1:** Buat folder `src/common/`
+
+**Langkah 2:** Buat file `src/common/response.rs` dengan kode berikut:
 
 ```rust
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use serde::Serialize;
 
+// Struct ApiResponse yang bisa langsung di-return dari handler
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T: Serialize> {
     pub success: bool,
@@ -333,6 +344,7 @@ pub struct ApiResponse<T: Serialize> {
     pub data: Option<T>,
 }
 
+// Method helper untuk membuat response sukses
 impl<T: Serialize> ApiResponse<T> {
     pub fn ok(data: T, message: &str) -> Self {
         Self {
@@ -343,24 +355,27 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
+// Implement IntoResponse — ini yang bikin ApiResponse bisa langsung di-return
 impl<T: Serialize> IntoResponse for ApiResponse<T> {
     fn into_response(self) -> Response {
+        // Bungkus dengan StatusCode::OK dan Json, maka otomatis jadi HTTP response
         (StatusCode::OK, Json(self)).into_response()
     }
 }
 ```
 
-Beberapa hal yang perlu dicatat:
+**Penjelasan:**
 
-- `#[serde(skip_serializing_if = "Option::is_none")]`: field `data` tidak akan muncul di JSON kalau nilainya `None`. Lebih bersih daripada `"data": null`.
-- `T: Serialize`: generic constraint. Tipe `T` apapun yang dipakai harus bisa di-serialize ke JSON.
-- Di `into_response`, kita bungkus dengan `(StatusCode::OK, Json(self))`, tuple ini sudah implement `IntoResponse` bawaan Axum.
+- **`#[serde(skip_serializing_if = "Option::is_none")]`**: Field `data` tidak akan muncul di JSON kalau nilainya `None`. Jadi output lebih rapi, bukan `"data": null`.
+- **`T: Serialize`**: Generic constraint. Tipe `T` apapun yang dipakai harus bisa di-serialize ke JSON.
+- **`into_response` method**: Ini yang "mengubah" `ApiResponse<T>` menjadi HTTP response yang Axum mengerti. Kita bungkus dengan `(StatusCode::OK, Json(self))` yang sudah punya `IntoResponse` bawaan Axum.
 
-Handler sekarang bisa ditulis seperti ini (contoh di `src/handlers/user_handler.rs` atau file handler mana pun):
+**Hasil:** Handler sekarang bisa ditulis lebih bersih:
 
 ```rust
 use axum::extract::Path;
 use uuid::Uuid;
+use crate::common::ApiResponse;
 
 pub async fn get_user(Path(id): Path<Uuid>) -> ApiResponse<UserDto> {
     let user = // ... ambil dari database
@@ -368,7 +383,7 @@ pub async fn get_user(Path(id): Path<Uuid>) -> ApiResponse<UserDto> {
 }
 ```
 
-Bersih. Tidak perlu wrap manual dengan `Json(...)` atau atur status code.
+Tidak perlu wrap manual dengan `Json(...)` atau atur status code! Jauh lebih rapi.
 
 ---
 
@@ -420,46 +435,50 @@ Contoh output JSON:
 
 ## AppError yang Otomatis Jadi HTTP Response
 
-Tanpa penanganan terpusat, setiap handler harus manual atur status code dan format pesan error. Ribuan baris kode akan penuh dengan logika yang sama berulang-ulang.
-
-Solusinya: buat enum `AppError` yang langsung implement `IntoResponse`. Setiap kali error terjadi, Axum tahu otomatis harus kirim response apa.
-
-Tambahkan `thiserror` ke `Cargo.toml` (saat ebook ini ditulis, Maret 2026, versi stabil adalah `2.x`):
-
-```toml
-[dependencies]
-thiserror = "2"
-anyhow = "1"
-```
-
-**`thiserror`** adalah library untuk bikin custom error dengan lebih sedikit boilerplate. **`anyhow`** untuk menangkap error umum yang tidak perlu diklasifikasi spesifik.
+Tanpa penanganan terpusat, setiap handler harus manual atur status code dan format pesan error. Ribuan baris kode akan penuh dengan logika yang sama berulang-ulang:
 
 ```rust
-use thiserror::Error;
+// Cara lama — berulang di setiap handler 😞
+async fn some_handler() -> (StatusCode, Json<Value>) {
+    if user_not_found {
+        return (StatusCode::NOT_FOUND, Json(json!({
+            "success": false,
+            "message": "User tidak ditemukan"
+        })));
+    }
+}
+```
 
-#[derive(Debug, Error)]
+Solusi: **buat enum `AppError` yang langsung implement `IntoResponse`**. Setiap kali error terjadi, Axum tahu otomatis harus kirim response apa.
+
+Tambahkan kode di `src/common/response.rs` (lanjutkan dari `ApiResponse`):
+
+```rust
+// ============================================
+// AppError — Enum untuk semua jenis error
+// ============================================
+
+#[derive(Debug)]
 pub enum AppError {
-    #[error("{0}")]
     NotFound(String),
-    #[error("{0}")]
     Unauthorized(String),
-    #[error("{0}")]
     Forbidden(String),
-    #[error("{0}")]
     Conflict(String),
-    #[error("{0}")]
+    BadRequest(String),
     ValidationError(String),
-    #[error("Internal server error")]
-    Internal(#[from] anyhow::Error),
+    Internal(String),
 }
 
+// Implement IntoResponse untuk AppError
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // Match error type, tentukan status code dan message
         let (status, message) = match &self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
             AppError::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -467,6 +486,7 @@ impl IntoResponse for AppError {
             ),
         };
 
+        // Buat response dengan format standar ApiResponse
         let body = ApiResponse::<()> {
             success: false,
             message,
@@ -478,9 +498,25 @@ impl IntoResponse for AppError {
 }
 ```
 
-Perhatikan `AppError::Internal`, pesannya tidak diekspos ke client. Internal error seringkali berisi detail teknis (koneksi database, stack trace) yang tidak boleh dilihat user. Kita log di server, tapi kirim pesan generik ke luar.
+**Penting:** Lihat `AppError::Internal` — pesannya **tidak diekspos** ke client. Internal error seringkali berisi detail teknis berbahaya (koneksi database error, stack trace). Kita log di server untuk debugging, tapi kirim pesan generik "Internal server error" ke luar.
 
-`#[from] anyhow::Error` artinya kalau ada `anyhow::Error`, Rust bisa otomatis konversi ke `AppError::Internal` pakai operator `?`, tidak perlu `.map_err(AppError::Internal)` manual.
+**Contoh pemakaian di handler:**
+
+```rust
+use crate::common::{ApiResponse, AppError, AppResult};
+
+pub async fn get_user(Path(id): Path<Uuid>) -> AppResult<ApiResponse<UserDto>> {
+    // Cek user di database
+    let user = db.find_user(id)
+        .await
+        .ok_or(AppError::NotFound(format!("User {} tidak ditemukan", id)))?;
+    
+    // Kalau ada error di tengah jalan, Axum otomatis handle dengan into_response
+    Ok(ApiResponse::ok(user, "User berhasil diambil"))
+}
+```
+
+Kalau `find_user` return `None`, kita konversi ke `AppError::NotFound` dengan `ok_or(...)`. Tanda `?` artinya: kalau error, langsung return error itu (Axum akan panggil `into_response` otomatis).
 
 [ILUSTRASI: Diagram alur error — dari database error atau validasi error, melalui AppError enum, kemudian otomatis dikonversi menjadi HTTP response dengan status code yang tepat dan format JSON yang konsisten]
 
@@ -494,31 +530,45 @@ Daripada nulis `Result<T, AppError>` berulang-ulang di setiap handler, buat type
 pub type AppResult<T> = Result<T, AppError>;
 ```
 
-**Type alias** hanya nama lain untuk tipe yang sudah ada, tidak bikin tipe baru, hanya shortcut.
+**Type alias** hanya nama lain untuk tipe yang sudah ada, tidak bikin tipe baru, hanya shortcut untuk pengetikan lebih cepat.
 
-Handler sekarang bisa ditulis (contoh di file handler mana pun):
+Tambahkan di `src/common/response.rs`:
 
 ```rust
-use axum::extract::Path;
-use uuid::Uuid;
+pub type AppResult<T> = Result<T, AppError>;
+```
 
+**Manfaat:**
+
+- `Result<T, AppError>` → `AppResult<T>` (lebih pendek)
+- Handler jadi lebih bersih dan mudah dibaca
+- Kalau nanti ganti error type, hanya ubah di satu tempat
+
+**Contoh pemakaian:**
+
+```rust
+use crate::common::{ApiResponse, AppError, AppResult};
+
+// Return type: AppResult<ApiResponse<UserDto>>
+// Artinya: Result<ApiResponse<UserDto>, AppError>
 pub async fn get_user(Path(id): Path<Uuid>) -> AppResult<ApiResponse<UserDto>> {
     let user = find_user_by_id(id).await
-        .ok_or(AppError::NotFound(format!("User dengan id {} tidak ditemukan", id)))?;
+        .ok_or(AppError::NotFound(format!("User {} tidak ditemukan", id)))?;
 
     Ok(ApiResponse::ok(user, "User berhasil diambil"))
 }
 ```
 
-Kalau `find_user_by_id` return `None`, kita konversi ke `AppError::NotFound` dengan `ok_or(...)`. Tanda `?` di akhir artinya: kalau error, langsung return error itu (Axum akan panggil `into_response` otomatis).
-
-Kalau sukses, wrap hasilnya dengan `Ok(ApiResponse::ok(...))`.
+Tanda `?` artinya:
+- Kalau ada error, langsung return error itu (Axum akan otomatis panggil `into_response`)
+- Kalau sukses, lanjut ke baris berikutnya
+- Lebih ringkas daripada `.map_err()` manual
 
 ---
 
 ## Module Declaration: `src/common/mod.rs`
 
-Sekarang buat file `src/common/mod.rs` untuk daftarkan sub-module:
+**Langkah 3:** Buat file `src/common/mod.rs`:
 
 ```rust
 pub mod response;
@@ -526,17 +576,21 @@ pub mod response;
 pub use response::{ApiResponse, AppError, AppResult, PaginatedResponse};
 ```
 
-Daftarkan di `src/main.rs`:
+**Langkah 4:** Daftarkan di `src/main.rs` di paling atas:
 
 ```rust
-mod common;
+mod models;
+mod dto;
+mod common;  // ← TAMBAH INI
 ```
 
-Setelah itu, di handler manapun, import dengan:
+**Setelah itu**, di handler manapun, import dengan:
 
 ```rust
 use crate::common::{ApiResponse, AppError, AppResult, PaginatedResponse};
 ```
+
+Dan bisa langsung pakai di handler tanpa wrap-wrap ribet. ✓
 
 ---
 
@@ -558,7 +612,7 @@ Setelah menyelesaikan latihan Bab 22, folder struktur harus seperti ini:
 
 ```
 src/
-├── main.rs
+├── main.rs                  ← update: tambah mod common;
 ├── models/
 │   ├── mod.rs
 │   ├── user.rs
@@ -568,10 +622,12 @@ src/
 │   ├── mod.rs
 │   ├── ticket_dto.rs
 │   └── user_dto.rs
-└── common/           ← NEW FOLDER
-    ├── mod.rs        ← NEW
-    └── response.rs   ← NEW (berisi ApiResponse, PaginatedResponse, AppError, AppResult)
+└── common/                  ← NEW FOLDER
+    ├── mod.rs              ← NEW
+    └── response.rs         ← NEW
 ```
+
+**File baru yang dibuat:** `src/common/response.rs` dan `src/common/mod.rs`
 
 **File: `src/common/response.rs`**
 ```rust
@@ -705,22 +761,23 @@ pub mod response;
 pub use response::{ApiResponse, AppError, AppResult, PaginatedResponse};
 ```
 
-**Update File: `src/main.rs`** — Tambahkan di paling atas:
+**Update File: `src/main.rs`** — Tambahkan `mod common;` di paling atas sebelum imports:
 ```rust
-mod common;
-mod dto;
 mod models;
+mod dto;
+mod common;  // ← TAMBAH INI
 
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use common::AppResult;
+use crate::dto::CreateTicketDto;
+use validator::Validate;
 
 // ... rest of code tetap sama dengan Bab 21
 ```
