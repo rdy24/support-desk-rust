@@ -349,16 +349,25 @@ Sekarang kita bikin DTOs dengan validasi. DTOs akan disimpan di folder `src/dto/
 
 ### Struktur Folder DTO
 
+**Langkah 1:** Buat folder baru bernama `src/dto/` (jika belum ada)
+
 ```
-src/dto/
-├── mod.rs            ← pub use semua DTO
-├── ticket_dto.rs     ← CreateTicketDto, UpdateTicketDto
-└── user_dto.rs       ← RegisterDto, LoginDto
+src/
+├── main.rs           ← sudah ada dari Bab 19
+├── models/           ← sudah ada dari Bab 20
+└── dto/              ← NEW FOLDER — akan dibuat di bagian ini
+    ├── mod.rs        ← NEW
+    ├── ticket_dto.rs ← NEW
+    └── user_dto.rs   ← NEW
 ```
 
 ---
 
-### File 1: `src/dto/ticket_dto.rs`
+### File 1 (BARU): `src/dto/ticket_dto.rs`
+
+**Lokasi:** Buat file baru bernama `ticket_dto.rs` di dalam folder `src/dto/`
+
+**Isi file:**
 
 ```rust
 use serde::Deserialize;
@@ -397,7 +406,11 @@ fn validate_priority(priority: &str) -> Result<(), validator::ValidationError> {
 
 ---
 
-### File 2: `src/dto/user_dto.rs`
+### File 2 (BARU): `src/dto/user_dto.rs`
+
+**Lokasi:** Buat file baru bernama `user_dto.rs` di dalam folder `src/dto/`
+
+**Isi file:**
 
 ```rust
 use serde::Deserialize;
@@ -439,9 +452,13 @@ pub struct LoginDto {
 
 ---
 
-### File 3: `src/dto/mod.rs`
+### File 3 (BARU): `src/dto/mod.rs`
 
-File ini daftarkan semua DTOs supaya mudah di-import:
+**Lokasi:** Buat file baru bernama `mod.rs` di dalam folder `src/dto/`
+
+**Isi file:**
+
+File ini tugasnya "mengumpulkan" semua sub-module (ticket_dto.rs dan user_dto.rs) dan mengeksport yang penting:
 
 ```rust
 pub mod ticket_dto;
@@ -451,10 +468,19 @@ pub use ticket_dto::CreateTicketDto;
 pub use user_dto::{LoginDto, RegisterDto};
 ```
 
-Daftarkan di `src/main.rs`:
+### Update `src/main.rs`
+
+**File yang diupdate:** `src/main.rs` (file dari Bab 19)
+
+**Yang ditambah:** Tambahkan satu baris di **paling atas** file, bersama dengan `mod models;`:
 
 ```rust
-mod dto;
+mod models;
+mod dto;  // ← TAMBAH INI
+
+use axum::{
+    // ... rest of imports
+};
 ```
 
 Sekarang di handler manapun, kamu bisa import dengan:
@@ -471,15 +497,17 @@ use crate::dto::{CreateTicketDto, LoginDto, RegisterDto};
 
 Setelah struct ter-derive dengan `Validate`, menjalankan validasinya mudah. Panggil `.validate()` dan tangani hasilnya.
 
-**Ini adalah update handler `create_ticket` di `src/main.rs` dari Bab 19:**
+**Update handler `create_ticket` di `src/main.rs` (file dari Bab 19):**
 
-Tambahkan import di awal file:
+**Langkah 1:** Tambahkan 2 import di awal file `src/main.rs`, bersama import lainnya:
+
 ```rust
-use crate::dto::CreateTicketDto;  // ← Import dari dto folder (NEW)
-use validator::Validate;          // ← Import untuk validasi (NEW)
+use crate::dto::CreateTicketDto;  // ← NEW
+use validator::Validate;          // ← NEW
 ```
 
-Lalu update function handler:
+**Langkah 2:** Cari fungsi `create_ticket` di `src/main.rs` (yang sudah ada) dan **ganti seluruh fungsi tersebut** dengan:
+
 ```rust
 async fn create_ticket(
     Json(body): Json<CreateTicketDto>,  // ← CHANGE: Json<Value> → Json<CreateTicketDto>
@@ -507,16 +535,22 @@ async fn create_ticket(
 ```
 
 **Yang berubah dari Bab 19:**
-1. Parameter `Json(body): Json<Value>` → `Json(body): Json<CreateTicketDto>` (sekarang typed!)
-2. Tambah `.validate()` check di awal handler
-3. Return `422 Unprocessable Entity` jika validasi gagal
-4. Setelah validasi lolos, baru process data
+1. Parameter: `Json(body): Json<Value>` → `Json(body): Json<CreateTicketDto>` (sekarang typed, bukan JSON sembarangan!)
+2. Validasi: Tambah `.validate()` check sebelum proses data
+3. Error handling: Return `422 Unprocessable Entity` jika validasi gagal
+4. Response error: Menyertakan pesan error yang detail dari validator
 
-**Tempat di file:** Update fungsi `create_ticket` di `src/main.rs` (ganti function yang lama dari Bab 19)
+**Hasil:** Sekarang endpoint `/tickets` POST akan:
+- ✓ Terima data dengan type-safe (CreateTicketDto)
+- ✓ Validasi sesuai rules yang didefinisikan di DTO
+- ✓ Return error 422 + detail error jika tidak valid
+- ✓ Return error 201 + success jika valid
 
-`.validate()` mengembalikan `Result<(), ValidationErrors>`. Kalau ada field yang gagal validasi, semua error-nya terkumpul di `ValidationErrors`, bukan berhenti di error pertama. Jadi client dapat info lengkap sekaligus.
-
-Status code `422 Unprocessable Entity` adalah standar HTTP untuk "request diterima tapi isinya bermasalah", lebih tepat dari `400 Bad Request` untuk kasus validasi.
+**Penjelasan `.validate()`:**
+- Mengembalikan `Result<(), ValidationErrors>`
+- Kalau Ada error, semua error-nya terkumpul di `ValidationErrors`, bukan berhenti di error pertama
+- Jadi client dapat info lengkap sekaligus: "subject terlalu pendek, category invalid, dll"
+- Status code `422 Unprocessable Entity` adalah standar HTTP untuk "request diterima tapi isinya bermasalah"
 
 ### Tanda `?` sebagai Alternatif
 
@@ -706,4 +740,22 @@ curl -X POST http://localhost:3000/tickets \
 # Harus response 201
 ```
 
-Di bab berikutnya, kita akan mulai menyambungkan DTO yang sudah tervalidasi ini ke database lewat repository layer. Data yang sudah bersih, siap disimpan.
+---
+
+## Ringkasan File yang Dibuat/Diupdate di Bab 21
+
+Setelah Bab 21 selesai, berikut status setiap file:
+
+| File | Status | Deskripsi |
+|------|--------|-----------|
+| `src/main.rs` | ✏️ DIUPDATE | Tambah `mod dto;` + update handler `create_ticket` |
+| `src/models/` | ✅ SUDAH ADA | Dari Bab 20 (4 file) |
+| `src/dto/mod.rs` | 🆕 BARU | File ini mengexport semua DTO |
+| `src/dto/ticket_dto.rs` | 🆕 BARU | CreateTicketDto + UpdateTicketDto dengan validasi |
+| `src/dto/user_dto.rs` | 🆕 BARU | RegisterDto + LoginDto dengan validasi |
+
+**Total: 8 file dalam folder src/**
+
+---
+
+Di bab berikutnya (Bab 22), kita akan membuat standar response handling dengan `src/common/response.rs` agar semua endpoint return format yang konsisten dan professional.

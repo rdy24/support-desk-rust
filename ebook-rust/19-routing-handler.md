@@ -230,6 +230,10 @@ Ini membuat kode lebih terorganisir. Nanti kita bisa punya `user_routes()`, `aut
 
 ## Kode Lengkap Bab Ini
 
+**File yang diupdate:** `src/main.rs` (file yang sudah dibuat di Bab 18)
+
+Ganti **seluruh isi** `src/main.rs` dengan kode berikut:
+
 ```rust
 use axum::{
     extract::{Path, Query},
@@ -348,7 +352,7 @@ curl -X POST http://localhost:3000/tickets \
 
 ## Latihan
 
-Sebelum lanjut ke bab berikutnya, coba kerjakan ini:
+Sebelum lanjut ke bab berikutnya, coba kerjakan ini. **Semua latihan dikerjakan di file `src/main.rs`**:
 
 1. **Tambah route DELETE:** buat handler `delete_ticket(Path(id): Path<u32>)` yang return `StatusCode::NO_CONTENT`. Tambahkan ke route `"{id}"` dengan `.delete(delete_ticket)`.
 
@@ -358,11 +362,25 @@ Sebelum lanjut ke bab berikutnya, coba kerjakan ini:
 
 Kalau semua endpoint bisa diakses dan return response yang benar, kita siap lanjut ke bab berikutnya.
 
+**Tips:**
+- Semua fungsi dan struct ditulis dalam 1 file: `src/main.rs`
+- Setiap handler adalah fungsi terpisah (mis: `get_tickets`, `create_ticket`, `delete_ticket`)
+- `ticket_routes()` dan `user_routes()` adalah fungsi yang return `Router`
+
 ---
 
 ## Hasil Akhir Bab Ini
 
-Setelah menyelesaikan semua latihan, `src/main.rs` kamu harus terlihat seperti ini:
+Setelah menyelesaikan semua latihan:
+
+**Status file:**
+
+| File | Status | Deskripsi |
+|------|--------|-----------|
+| `src/main.rs` | ✏️ DIUPDATE | Sekarang punya 7 handlers + 2 route functions |
+| `Cargo.toml` | ✅ TIDAK BERUBAH | Masih sama seperti Bab 18 |
+
+**File `src/main.rs` kamu harus terlihat seperti ini:**
 
 ```rust
 use axum::{

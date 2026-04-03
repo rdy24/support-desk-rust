@@ -291,25 +291,31 @@ pub timestamp: u64,  // di JSON muncul sebagai "ts"
 
 ## Struktur Folder Models
 
-Sekarang kita definisikan model-model utama untuk Support Desk. Pertama, buat folder baru `src/models/`. Folder ini akan berisi semua struct untuk User, Ticket, DTO, dan Response.
+Sekarang kita definisikan model-model utama untuk Support Desk. Kita akan membuat folder baru `src/models/` yang berisi semua struct untuk User, Ticket, dan Response.
+
+**Langkah 1:** Buat folder baru bernama `src/models/` (jika belum ada)
 
 **Struktur yang akan kita buat:**
 
 ```
 src/
-├── main.rs
-└── models/
-    ├── mod.rs          ← file ini daftarkan semua module
-    ├── user.rs         ← struct User
-    ├── ticket.rs       ← struct Ticket + CreateTicketDto
-    └── api_response.rs ← struct ApiResponse<T>
+├── main.rs              ← sudah ada dari Bab 19
+└── models/              ← NEW FOLDER — akan dibuat di bagian ini
+    ├── mod.rs          ← NEW — file ini daftarkan semua module
+    ├── user.rs         ← NEW — struct User
+    ├── ticket.rs       ← NEW — struct Ticket
+    └── api_response.rs ← NEW — struct ApiResponse<T>
 ```
 
 ---
 
 ## Model User dan Ticket
 
-### File 1: `src/models/user.rs`
+### File 1 (BARU): `src/models/user.rs`
+
+**Lokasi:** Buat file baru bernama `user.rs` di dalam folder `src/models/`
+
+**Isi file:**
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -332,9 +338,13 @@ pub struct User {
 
 Beberapa hal penting di sini. `Uuid` menghasilkan ID unik yang tidak bisa ditebak, lebih aman dari integer auto-increment. `DateTime<Utc>` adalah timestamp dengan timezone UTC dari library `chrono`. `#[serde(skip_serializing)]` di `password` bersifat krusial untuk keamanan karena password hash tidak boleh pernah dikirim ke client. `Clone` dipasang agar struct bisa di-copy, berguna saat kita perlu pass ke beberapa tempat.
 
-### File 2: `src/models/ticket.rs`
+### File 2 (BARU): `src/models/ticket.rs`
+
+**Lokasi:** Buat file baru bernama `ticket.rs` di dalam folder `src/models/`
 
 File ini berisi **dua** struct: `Ticket` (model utama) dan `CreateTicketDto` (untuk input dari client).
+
+**Isi file:**
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -409,7 +419,11 @@ JSON yang dihasilkan:
 
 ---
 
-### File 3: `src/models/api_response.rs`
+### File 3 (BARU): `src/models/api_response.rs`
+
+**Lokasi:** Buat file baru bernama `api_response.rs` di dalam folder `src/models/`
+
+**Isi file:**
 
 File ini berisi wrapper response generik `ApiResponse<T>`:
 
@@ -447,9 +461,13 @@ impl<T: Serialize> ApiResponse<T> {
 
 ---
 
-## Module Declaration: `src/models/mod.rs`
+## Module Declaration: `src/models/mod.rs` (BARU)
 
-Sekarang gabungkan semua model dalam satu module dengan membuat `src/models/mod.rs`:
+**Lokasi:** Buat file baru bernama `mod.rs` di dalam folder `src/models/`
+
+File ini tugasnya "mengumpulkan" semua sub-module (user.rs, ticket.rs, api_response.rs) dan mengeksport yang penting.
+
+**Isi file:**
 
 ```rust
 pub mod api_response;
@@ -465,10 +483,18 @@ pub use user::User;
 - `CreateTicketDto` **tidak** diexport dari models, karena akan dipindah ke folder `src/dto/` di Bab 21
 - Hanya `Ticket` (model utama) yang diexport dari sini
 
-Daftarkan di `src/main.rs`:
+### Update `src/main.rs`
+
+**File yang diupdate:** `src/main.rs` (file dari Bab 19)
+
+**Yang ditambah:** Tambahkan satu baris di **paling atas** file, sebelum `use` statements:
 
 ```rust
-mod models;
+mod models;  // ← TAMBAH INI DI PALING ATAS
+
+use axum::{
+    // ... rest of imports
+};
 ```
 
 Setelah itu, di mana saja dalam project, kita bisa tulis:
@@ -499,16 +525,28 @@ Setelah bab ini, struktur folder dan file harus seperti ini:
 
 ```
 support-desk/
-├── Cargo.toml
+├── Cargo.toml             ← TIDAK BERUBAH
 ├── src/
-│   ├── main.rs            ← update: tambah `mod models;`
-│   └── models/
-│       ├── mod.rs         ← NEW
-│       ├── user.rs        ← NEW
-│       ├── ticket.rs      ← NEW
-│       └── api_response.rs ← NEW
-└── target/
+│   ├── main.rs            ← ✏️ DIUPDATE: tambah `mod models;` di awal
+│   └── models/            ← 🆕 NEW FOLDER
+│       ├── mod.rs         ← 🆕 NEW
+│       ├── user.rs        ← 🆕 NEW
+│       ├── ticket.rs      ← 🆕 NEW
+│       └── api_response.rs ← 🆕 NEW
+└── target/                ← auto-generated
 ```
+
+**Status file:**
+
+| File | Status | Deskripsi |
+|------|--------|-----------|
+| `src/main.rs` | ✏️ DIUPDATE | Hanya tambah: `mod models;` |
+| `src/models/mod.rs` | 🆕 BARU | Mengexport 3 struct: ApiResponse, Ticket, User |
+| `src/models/user.rs` | 🆕 BARU | Struct User dengan fields: id, name, email, password, role, dll |
+| `src/models/ticket.rs` | 🆕 BARU | 2 struct: Ticket (model) dan CreateTicketDto (input) |
+| `src/models/api_response.rs` | 🆕 BARU | Generic ApiResponse<T> wrapper |
+
+**Total: 5 file dalam folder src/** (main.rs + 1 models folder dengan 4 file)
 
 **File 1: `src/models/user.rs`**
 ```rust
