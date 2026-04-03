@@ -4,6 +4,7 @@ use crate::models::{Ticket, TicketStatus, TicketPriority, TicketCategory};
 use crate::dto::{CreateTicketDto, UpdateTicketDto};
 use crate::common::AppError;
 
+#[derive(Clone)]
 pub struct TicketRepository {
     pool: PgPool,
 }

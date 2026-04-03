@@ -17,13 +17,32 @@ use crate::dto::CreateTicketDto;
 use validator::Validate;
 use sqlx::PgPool;
 use db::create_pool;
+use crate::repositories::{
+    UserRepository, TicketRepository, ResponseRepository, DashboardRepository,
+};
 
 // ============================================
-// AppState — berbagi database connection pool ke semua handler
+// AppState — berbagi repositories dan pool ke semua handler
 // ============================================
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
+    pub user_repo: UserRepository,
+    pub ticket_repo: TicketRepository,
+    pub response_repo: ResponseRepository,
+    pub dashboard_repo: DashboardRepository,
+}
+
+impl AppState {
+    pub fn new(pool: PgPool) -> Self {
+        Self {
+            user_repo: UserRepository::new(pool.clone()),
+            ticket_repo: TicketRepository::new(pool.clone()),
+            response_repo: ResponseRepository::new(pool.clone()),
+            dashboard_repo: DashboardRepository::new(pool.clone()),
+            db: pool,
+        }
+    }
 }
 
 #[derive(Deserialize)]

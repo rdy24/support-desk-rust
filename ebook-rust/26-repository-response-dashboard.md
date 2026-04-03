@@ -7,42 +7,56 @@ Bayangkan kamu kerja di sebuah call center. Ada dua buku catatan berbeda di meja
 
 Kedua buku ini punya sifat yang sangat berbeda. Buku tamu = insert dan lookup per tiket. Papan statistik = hitung-hitungan besar dari seluruh data.
 
-Dua "buku catatan" tadi tercermin dalam dua repository yang dibahas di bab ini: `ResponseRepository` dan `DashboardRepository`.
-
-[ILUSTRASI: Dua meja kerja, meja kiri ada "Buku Tamu Percakapan" (ResponseRepository) untuk insert/lookup per tiket, meja kanan ada "Papan Statistik" (DashboardRepository) dengan angka-angka aggregate di papan tulis]
-
 ---
 
 ## Kunci Jawaban & State Sebelumnya
 
 **Kunci Jawaban Latihan Bab 25:**
-- Latihan #1-4 sudah tercakup di "Hasil Akhir Bab 25" (UserRepository & TicketRepository lengkap dengan delete method & category filter)
-- **⚠️ PENTING:** Pastikan enum types sudah dibuat di Bab 25:
-  - `src/models/enums.rs` dengan `UserRole`, `TicketStatus`, `TicketPriority`, `TicketCategory` (masing-masing dengan `#[derive(sqlx::Type)]`)
-  - Model `User` dan `Ticket` sudah di-update untuk menggunakan enum types, bukan `String`
+- `UserRepository` dan `TicketRepository` lengkap dengan semua method (find_by_id, find_many, create, update, delete)
+- Enum types di `src/models/enums.rs` sudah ada: `UserRole`, `TicketStatus`, `TicketPriority`, `TicketCategory`
+- Model `User` dan `Ticket` sudah menggunakan enum types, bukan String
 
 **State Sebelumnya:**
-Folder `src/repositories/` harus punya 3 file (user, ticket, response) dari Bab 25. AppState sudah include ketiga repositories.
+- Folder `src/repositories/` sudah ada dengan `user_repository.rs` dan `ticket_repository.rs`
+- `src/repositories/mod.rs` sudah export kedua repository
 
-Verifikasi dengan menjalankan:
+Verifikasi:
 ```bash
 cargo build
-# Harus compile tanpa error tentang "no built in mapping found"
+# Harus 0 errors (warnings tentang unused code OK)
 ```
+
+---
+
+## State Sebelumnya: Persiapan Repositories
+
+**PENTING:** Dari Bab 25, `UserRepository` dan `TicketRepository` HARUS sudah punya `#[derive(Clone)]`. Kalau belum, update di `src/repositories/user_repository.rs` dan `src/repositories/ticket_repository.rs`:
+
+```rust
+#[derive(Clone)]
+pub struct UserRepository { ... }
+
+#[derive(Clone)]
+pub struct TicketRepository { ... }
+```
+
+Kenapa? Karena bab ini akan memasukkan keempat repositories ke `AppState`, yang sendiri derive `Clone`. PgPool sudah Clone-able (Arc internally), jadi aman untuk clone repositories.
 
 ---
 
 ## ResponseRepository
 
-Tambahkan file baru di `src/repositories/response_repository.rs`.
+Buat file baru: `src/repositories/response_repository.rs`
 
 ### Struct dan Constructor
 
 ```rust
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::{errors::AppError, models::ticket_response::TicketResponse};
+use crate::models::TicketResponse;
+use crate::common::AppError;
 
+#[derive(Clone)]
 pub struct ResponseRepository {
     pool: PgPool,
 }
@@ -54,9 +68,9 @@ impl ResponseRepository {
 }
 ```
 
-### `create`
+**Penjelasan:** `ResponseRepository` mengikuti pola yang sama seperti `UserRepository` dan `TicketRepository` dari Bab 25. Struct hanya wrap `PgPool`, dan konstruktor membuat instance baru.
 
-Method ini menyimpan satu balasan tiket ke tabel `ticket_responses`.
+### Method `create` — Simpan Balasan Baru
 
 ```rust
 pub async fn create(
@@ -65,68 +79,100 @@ pub async fn create(
     user_id: Uuid,
     message: String,
 ) -> Result<TicketResponse, AppError> {
-    let response = sqlx::query_as!(
-        TicketResponse,
-        r#"
-        INSERT INTO ticket_responses (ticket_id, user_id, message)
-        VALUES ($1, $2, $3)
-        RETURNING *
-        "#,
-        ticket_id,
-        user_id,
-        message
+    #[derive(sqlx::FromRow)]
+    struct ResponseRow {
+        id: Uuid,
+        ticket_id: Uuid,
+        user_id: Uuid,
+        message: String,
+        created_at: chrono::DateTime<chrono::Utc>,
+    }
+
+    let row = sqlx::query_as::<_, ResponseRow>(
+        r#"INSERT INTO ticket_responses (ticket_id, user_id, message)
+           VALUES ($1, $2, $3)
+           RETURNING id, ticket_id, user_id, message, created_at"#
     )
+    .bind(ticket_id)
+    .bind(user_id)
+    .bind(&message)
     .fetch_one(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(response)
+    Ok(TicketResponse {
+        id: row.id,
+        ticket_id: row.ticket_id,
+        user_id: row.user_id,
+        message: row.message,
+        created_at: row.created_at,
+    })
 }
 ```
 
-`RETURNING *` adalah fitur PostgreSQL yang mengembalikan baris yang baru saja di-insert tanpa perlu query tambahan.
+**Penjelasan:**
+- Gunakan temporary struct `ResponseRow` dengan `#[derive(sqlx::FromRow)]` untuk mapping database row ke Rust struct
+- `RETURNING *` atau (lebih eksplisit) `RETURNING id, ticket_id, ...` mengembalikan baris baru yang di-insert
+- Struct `TicketResponse` di `src/models/ticket.rs` tidak derive `sqlx::FromRow` (hanya `Serialize, Deserialize`), jadi kita gunakan `ResponseRow` sebagai perantara
+- Error mapping: `.map_err(|e| AppError::Internal(e.to_string()))?`
 
-### `find_by_ticket_id`
-
-Ambil semua balasan untuk satu tiket tertentu, diurutkan dari yang paling lama.
+### Method `find_by_ticket_id` — Ambil Semua Balasan
 
 ```rust
 pub async fn find_by_ticket_id(
     &self,
     ticket_id: Uuid,
 ) -> Result<Vec<TicketResponse>, AppError> {
-    let responses = sqlx::query_as!(
-        TicketResponse,
-        r#"
-        SELECT * FROM ticket_responses
-        WHERE ticket_id = $1
-        ORDER BY created_at ASC
-        "#,
-        ticket_id
+    #[derive(sqlx::FromRow)]
+    struct ResponseRow {
+        id: Uuid,
+        ticket_id: Uuid,
+        user_id: Uuid,
+        message: String,
+        created_at: chrono::DateTime<chrono::Utc>,
+    }
+
+    let rows = sqlx::query_as::<_, ResponseRow>(
+        r#"SELECT id, ticket_id, user_id, message, created_at
+           FROM ticket_responses
+           WHERE ticket_id = $1
+           ORDER BY created_at ASC"#
     )
+    .bind(ticket_id)
     .fetch_all(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Ok(responses)
+    Ok(rows.into_iter().map(|r| TicketResponse {
+        id: r.id,
+        ticket_id: r.ticket_id,
+        user_id: r.user_id,
+        message: r.message,
+        created_at: r.created_at,
+    }).collect())
 }
 ```
 
-`.fetch_all()` dipakai karena satu tiket bisa punya banyak balasan. Hasilnya `Vec<TicketResponse>`, bisa kosong kalau belum ada balasan, bisa berisi banyak.
+**Penjelasan:**
+- `.fetch_all()` mengembalikan `Vec<ResponseRow>`
+- Urutan `ORDER BY created_at ASC` = paling lama duluan (urut kronologis)
+- `.into_iter().map(...)` mengonversi vector `ResponseRow` ke vector `TicketResponse`
 
 ---
 
 ## DashboardRepository
 
-Dashboard bukan sekadar "ambil data", dia harus **menghitung dan meringkas** data dari seluruh tabel.
+Buat file baru: `src/repositories/dashboard_repository.rs`
 
-Buat file `src/repositories/dashboard_repository.rs`.
+Dashboard merupakan aggregate queries — hitung jumlah tiket per status, hitung user per role, dll. Bukan operasi sederhana per-record.
 
 ### Struct `DashboardStats`
 
-Pertama, definisikan struct untuk menampung hasil statistik:
-
 ```rust
+use serde::Serialize;
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct DashboardStats {
     pub total_tickets: i64,
     pub open_tickets: i64,
@@ -136,17 +182,23 @@ pub struct DashboardStats {
     pub total_users: i64,
     pub total_agents: i64,
     pub total_customers: i64,
+    pub avg_responses_per_ticket: f64,
 }
 ```
 
-`COUNT(*)` di PostgreSQL mengembalikan tipe `BIGINT`, dan `sqlx` memetakannya ke `i64` di Rust. Kalau kamu pakai `i32`, kompilasi akan error karena tipe tidak cocok.
+**Penjelasan:**
+- `COUNT(*)` di PostgreSQL mengembalikan `BIGINT`, yang sqlx map ke `i64` di Rust
+- Gunakan `i64`, bukan `i32` (akan compile error kalau tipe tidak sesuai)
+- Derive `Serialize` agar bisa di-convert ke JSON untuk HTTP response
+- `#[serde(rename_all = "camelCase")]` agar di JSON muncul sebagai `totalTickets`, `openTickets`, dll (sesuai API convention)
 
-### Struct Repository
+### Struct `DashboardRepository`
 
 ```rust
 use sqlx::PgPool;
 use crate::common::AppError;
 
+#[derive(Clone)]
 pub struct DashboardRepository {
     pool: PgPool,
 }
@@ -158,127 +210,128 @@ impl DashboardRepository {
 }
 ```
 
-### Query Aggregate dengan `FILTER`
+### Method `get_stats` — Query Aggregate
 
-Bagian paling krusial adalah method `get_stats`:
+Ini adalah method paling penting. Dashboard biasanya query data agregat — hitung jumlah, rata-rata, dsb. PostgreSQL punya teknik efisien untuk ini: `COUNT(*) FILTER (WHERE ...)`.
 
 ```rust
 pub async fn get_stats(&self) -> Result<DashboardStats, AppError> {
-    let ticket_stats = sqlx::query!(
-        r#"
-        SELECT
-            COUNT(*) FILTER (WHERE status = 'open') as open_tickets,
-            COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_tickets,
-            COUNT(*) FILTER (WHERE status = 'resolved') as resolved_tickets,
-            COUNT(*) FILTER (WHERE status = 'closed') as closed_tickets,
-            COUNT(*) as total_tickets
-        FROM tickets
-        "#
-    )
-    .fetch_one(&self.pool)
-    .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    // --- Statistik Tiket ---
+    #[derive(sqlx::FromRow)]
+    struct TicketStatsRow {
+        total_tickets: i64,
+        open_tickets: i64,
+        in_progress_tickets: i64,
+        resolved_tickets: i64,
+        closed_tickets: i64,
+    }
 
-    let user_stats = sqlx::query!(
-        r#"
-        SELECT
-            COUNT(*) as total_users,
-            COUNT(*) FILTER (WHERE role = 'agent') as total_agents,
-            COUNT(*) FILTER (WHERE role = 'customer') as total_customers
-        FROM users
-        "#
+    let ticket_stats = sqlx::query_as::<_, TicketStatsRow>(
+        r#"SELECT
+            COUNT(*) AS total_tickets,
+            COUNT(*) FILTER (WHERE status = 'open') AS open_tickets,
+            COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress_tickets,
+            COUNT(*) FILTER (WHERE status = 'resolved') AS resolved_tickets,
+            COUNT(*) FILTER (WHERE status = 'closed') AS closed_tickets
+        FROM tickets"#
     )
     .fetch_one(&self.pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?;
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // --- Statistik User ---
+    #[derive(sqlx::FromRow)]
+    struct UserStatsRow {
+        total_users: i64,
+        total_agents: i64,
+        total_customers: i64,
+    }
+
+    let user_stats = sqlx::query_as::<_, UserStatsRow>(
+        r#"SELECT
+            COUNT(*) AS total_users,
+            COUNT(*) FILTER (WHERE role = 'agent') AS total_agents,
+            COUNT(*) FILTER (WHERE role = 'customer') AS total_customers
+        FROM users"#
+    )
+    .fetch_one(&self.pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // --- Rata-rata Responses Per Tiket ---
+    let total_responses: i64 = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM ticket_responses"
+    )
+    .fetch_one(&self.pool)
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let avg_responses_per_ticket = if ticket_stats.total_tickets > 0 {
+        total_responses as f64 / ticket_stats.total_tickets as f64
+    } else {
+        0.0
+    };
 
     Ok(DashboardStats {
-        total_tickets: ticket_stats.total_tickets.unwrap_or(0),
-        open_tickets: ticket_stats.open_tickets.unwrap_or(0),
-        in_progress_tickets: ticket_stats.in_progress_tickets.unwrap_or(0),
-        resolved_tickets: ticket_stats.resolved_tickets.unwrap_or(0),
-        closed_tickets: ticket_stats.closed_tickets.unwrap_or(0),
-        total_users: user_stats.total_users.unwrap_or(0),
-        total_agents: user_stats.total_agents.unwrap_or(0),
-        total_customers: user_stats.total_customers.unwrap_or(0),
+        total_tickets: ticket_stats.total_tickets,
+        open_tickets: ticket_stats.open_tickets,
+        in_progress_tickets: ticket_stats.in_progress_tickets,
+        resolved_tickets: ticket_stats.resolved_tickets,
+        closed_tickets: ticket_stats.closed_tickets,
+        total_users: user_stats.total_users,
+        total_agents: user_stats.total_agents,
+        total_customers: user_stats.total_customers,
+        avg_responses_per_ticket,
     })
 }
 ```
 
-### Kenapa `FILTER` Lebih Efisien dari Multiple Query?
+**Penjelasan:**
 
-Coba bayangkan dua pendekatan:
+**`COUNT(*) FILTER (WHERE ...)`:**
+- Teknik PostgreSQL untuk conditional aggregation
+- Satu scan tabel, menghitung beberapa counter sekaligus
+- Lebih efisien dari 5 query terpisah
+- `COUNT(*)` tanpa FILTER = total baris, dengan FILTER = hitung baris yang memenuhi kondisi
 
-**Pendekatan naif,** 5 query terpisah:
-```sql
-SELECT COUNT(*) FROM tickets;
-SELECT COUNT(*) FROM tickets WHERE status = 'open';
-SELECT COUNT(*) FROM tickets WHERE status = 'in_progress';
--- dst...
-```
+**`sqlx::query_scalar`:**
+- Ketika query cuma return satu nilai (scalar), bukan struct
+- `.fetch_one()` mengembalikan `i64` langsung, bukan wrapped dalam struct
 
-Setiap query berarti satu bolak-balik ke database. Kalau servernya jauh atau lagi sibuk, latency-nya menumpuk.
-
-**Pendekatan `FILTER`,** 1 query, satu scan:
-```sql
-SELECT
-    COUNT(*) as total,
-    COUNT(*) FILTER (WHERE status = 'open') as open
-FROM tickets;
-```
-
-Database cukup **scan tabel satu kali**, sambil jalan menghitung beberapa counter sekaligus. Hasilnya sama, tapi jauh lebih hemat. Teknik ini disebut *conditional aggregation*: aggregate dengan kondisi tertentu, di PostgreSQL pakai `FILTER (WHERE ...)`.
-
-[ILUSTRASI: Perbandingan dua skenario. Kiri: 5 kotak query terpisah masing-masing menuju database (5 panah); kanan: 1 kotak query tunggal dengan satu panah ke database, hasilnya 5 angka sekaligus. Label "5x bolak-balik" vs "1x bolak-balik"]
+**Division by Zero:**
+- Cegah dengan check `if ticket_stats.total_tickets > 0`
+- Kalau zero, return `0.0` daripada panic
 
 ---
 
-## Raw String `r#"..."#` untuk SQL Multi-baris
+## Daftarkan Repository Baru
 
-Kamu mungkin sudah perhatikan kita pakai `r#"..."#` di semua query. Ini disebut **raw string literal** di Rust.
-
-SQL multi-baris biasanya mengandung tanda kutip untuk nilai string seperti `'open'` atau `'agent'`. Kalau ditulis dalam string Rust biasa:
+### Update `src/repositories/mod.rs`
 
 ```rust
-// ❌ Ini error — tanda kutip di dalam string harus di-escape
-"SELECT * FROM tickets WHERE status = 'open'"
-//                                    ^   ^ konflik!
-```
-
-Solusinya raw string:
-
-```rust
-// ✅ Tanda kutip dalam raw string tidak perlu di-escape
-r#"SELECT * FROM tickets WHERE status = 'open'"#
-```
-
-Aturan raw string: dimulai dengan `r#"` dan diakhiri `"#`, isi di dalamnya ditulis apa adanya tanpa escape character. Kalau isi string kamu sendiri mengandung `"#`, tambahkan lebih banyak `#`: `r##"..."##`. Untuk SQL panjang multi-baris, kombinasi raw string dan indentasi membuat query mudah dibaca, persis seperti kamu tulis di database client.
-
----
-
-## Daftarkan ke `mod.rs` dan `AppState`
-
-Tambahkan kedua repository baru ke `src/repositories/mod.rs`:
-
-```rust
-pub mod dashboard_repository;
-pub mod response_repository;
-pub mod ticket_repository;
 pub mod user_repository;
+pub mod ticket_repository;
+pub mod response_repository;
+pub mod dashboard_repository;
+
+pub use user_repository::UserRepository;
+pub use ticket_repository::TicketRepository;
+pub use response_repository::ResponseRepository;
+pub use dashboard_repository::{DashboardRepository, DashboardStats};
 ```
 
-Lalu perbarui `AppState` di `src/state.rs` (atau di mana kamu menyimpannya):
+### Update `src/main.rs` — AppState dan Constructor
+
+Di bagian atas file (setelah imports), update `AppState`:
 
 ```rust
 use crate::repositories::{
-    dashboard_repository::DashboardRepository,
-    response_repository::ResponseRepository,
-    ticket_repository::TicketRepository,
-    user_repository::UserRepository,
+    UserRepository, TicketRepository, ResponseRepository, DashboardRepository,
 };
 
 #[derive(Clone)]
 pub struct AppState {
+    pub db: PgPool,
     pub user_repo: UserRepository,
     pub ticket_repo: TicketRepository,
     pub response_repo: ResponseRepository,
@@ -291,22 +344,361 @@ impl AppState {
             user_repo: UserRepository::new(pool.clone()),
             ticket_repo: TicketRepository::new(pool.clone()),
             response_repo: ResponseRepository::new(pool.clone()),
-            dashboard_repo: DashboardRepository::new(pool),
+            dashboard_repo: DashboardRepository::new(pool.clone()),
+            db: pool,
         }
     }
 }
 ```
 
-Perhatikan `pool.clone()`, kita clone pool karena `PgPool` di `sqlx` adalah connection pool yang aman di-clone (saat ebook ini ditulis, Maret 2026, sqlx versi 0.8.x). Clone-nya murah karena yang di-clone hanya reference ke pool, bukan koneksi aktual.
+**Penjelasan:**
+- Semua repository di-wrap di `AppState` untuk easy injection ke handlers nanti
+- `#[derive(Clone)]` on `UserRepository`, `TicketRepository`, `ResponseRepository`, `DashboardRepository` (semua struct hanya wrap `PgPool`, dan `PgPool` is Clone)
+- Constructor `AppState::new(pool)` membuat semua repository sekaligus
+- `pool.clone()` aman karena `PgPool` adalah Arc internally, clone-nya cuma reference increment
 
 ---
 
 ## Latihan
 
-1. **Tambah method `find_latest_by_ticket_id`** di `ResponseRepository`: ambil hanya balasan terbaru (1 baris) untuk tiket tertentu. Hint: gunakan `ORDER BY created_at DESC` dan `.fetch_optional()`.
+1. **Tambah method `find_latest_by_ticket_id`** di `ResponseRepository`: ambil hanya balasan terbaru (1 baris) untuk tiket tertentu. Hint: gunakan `ORDER BY created_at DESC LIMIT 1` dan `.fetch_optional()`.
 
-2. **Modifikasi `DashboardStats`:** tambahkan field `avg_responses_per_ticket: f64` yang menghitung rata-rata jumlah balasan per tiket. Kamu perlu query ke tabel `ticket_responses` dan bagi dengan total tiket. Pertimbangkan: bagaimana handle kasus `total_tickets = 0` agar tidak terjadi division by zero?
+2. **Modifikasi `DashboardStats`:** tambahkan field `avg_responses_per_ticket: f64`. Kamu perlu hitung total responses dari tabel `ticket_responses`, bagi dengan total tiket. Hint: gunakan `sqlx::query_scalar` untuk COUNT satu nilai. Handle `total_tickets = 0` agar tidak division by zero.
 
-3. **Optimasi query dashboard:** coba gabungkan `ticket_stats` dan `user_stats` menjadi satu query dengan `CROSS JOIN` atau subquery. Bandingkan keterbacaannya dengan versi dua query terpisah. Mana yang lebih kamu sukai dan kenapa?
+3. **Optimasi query dashboard:** coba gabungkan `ticket_stats` dan `user_stats` menjadi satu query dengan CROSS JOIN. Bandingkan keterbacaan code-nya dengan versi dua query terpisah. Mana yang lebih kamu sukai dan kenapa?
 
-4. **Error handling:** saat ini kalau database sedang down, kita return `AppError::Internal`. Tambahkan log pesan error sebelum return, menggunakan macro `tracing::error!("Database error: {:?}", e)`. Pastikan kamu sudah tambahkan `tracing` sebagai dependency.
+4. **Error handling dengan logging:** saat ini kalau database error, kita return `AppError::Internal`. Coba tambahkan log error sebelum return, menggunakan macro `eprintln!("Database error: {:?}", e)` (simple version tanpa library `tracing`). Verifikasi log muncul di console saat error.
+
+---
+
+## Hasil Akhir Bab Ini
+
+Setelah menyelesaikan latihan Bab 26, struktur folder dan file harus seperti ini:
+
+```
+src/
+├── repositories/           ← UPDATED & EXPANDED
+│   ├── mod.rs              ← UPDATE: tambah response & dashboard modules
+│   ├── user_repository.rs  ← UPDATE: tambah #[derive(Clone)]
+│   ├── ticket_repository.rs ← UPDATE: tambah #[derive(Clone)]
+│   ├── response_repository.rs ← NEW
+│   └── dashboard_repository.rs ← NEW
+├── models/
+│   ├── mod.rs
+│   ├── enums.rs
+│   ├── user.rs
+│   ├── ticket.rs
+│   └── api_response.rs
+├── main.rs                 ← UPDATE: AppState + constructor
+├── dto/
+├── common/
+└── db.rs
+```
+
+### File: `src/repositories/user_repository.rs` & `ticket_repository.rs` — Sudah Updated dari Bab 25
+
+Kedua file sudah punya `#[derive(Clone)]` dari Bab 25. Tidak perlu diubah lagi.
+
+### File: `src/repositories/response_repository.rs` — BARU
+
+```rust
+use sqlx::PgPool;
+use uuid::Uuid;
+use crate::models::TicketResponse;
+use crate::common::AppError;
+
+/// Repository untuk mengelola ticket responses (balasan tiket)
+#[derive(Clone)]
+pub struct ResponseRepository {
+    pool: PgPool,
+}
+
+impl ResponseRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Simpan balasan baru untuk tiket
+    pub async fn create(
+        &self,
+        ticket_id: Uuid,
+        user_id: Uuid,
+        message: String,
+    ) -> Result<TicketResponse, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct ResponseRow {
+            id: Uuid,
+            ticket_id: Uuid,
+            user_id: Uuid,
+            message: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let row = sqlx::query_as::<_, ResponseRow>(
+            r#"INSERT INTO ticket_responses (ticket_id, user_id, message)
+               VALUES ($1, $2, $3)
+               RETURNING id, ticket_id, user_id, message, created_at"#
+        )
+        .bind(ticket_id)
+        .bind(user_id)
+        .bind(&message)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(TicketResponse {
+            id: row.id,
+            ticket_id: row.ticket_id,
+            user_id: row.user_id,
+            message: row.message,
+            created_at: row.created_at,
+        })
+    }
+
+    /// Ambil semua balasan untuk satu tiket, urut dari paling lama
+    pub async fn find_by_ticket_id(
+        &self,
+        ticket_id: Uuid,
+    ) -> Result<Vec<TicketResponse>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct ResponseRow {
+            id: Uuid,
+            ticket_id: Uuid,
+            user_id: Uuid,
+            message: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows = sqlx::query_as::<_, ResponseRow>(
+            r#"SELECT id, ticket_id, user_id, message, created_at
+               FROM ticket_responses
+               WHERE ticket_id = $1
+               ORDER BY created_at ASC"#
+        )
+        .bind(ticket_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(rows.into_iter().map(|r| TicketResponse {
+            id: r.id,
+            ticket_id: r.ticket_id,
+            user_id: r.user_id,
+            message: r.message,
+            created_at: r.created_at,
+        }).collect())
+    }
+
+    /// (Latihan #1) Ambil balasan terbaru untuk satu tiket
+    pub async fn find_latest_by_ticket_id(
+        &self,
+        ticket_id: Uuid,
+    ) -> Result<Option<TicketResponse>, AppError> {
+        #[derive(sqlx::FromRow)]
+        struct ResponseRow {
+            id: Uuid,
+            ticket_id: Uuid,
+            user_id: Uuid,
+            message: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let row = sqlx::query_as::<_, ResponseRow>(
+            r#"SELECT id, ticket_id, user_id, message, created_at
+               FROM ticket_responses
+               WHERE ticket_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1"#
+        )
+        .bind(ticket_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        Ok(row.map(|r| TicketResponse {
+            id: r.id,
+            ticket_id: r.ticket_id,
+            user_id: r.user_id,
+            message: r.message,
+            created_at: r.created_at,
+        }))
+    }
+}
+```
+
+### File: `src/repositories/dashboard_repository.rs` — BARU
+
+```rust
+use sqlx::PgPool;
+use serde::Serialize;
+use crate::common::AppError;
+
+/// Statistik dashboard untuk aplikasi
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardStats {
+    pub total_tickets: i64,
+    pub open_tickets: i64,
+    pub in_progress_tickets: i64,
+    pub resolved_tickets: i64,
+    pub closed_tickets: i64,
+    pub total_users: i64,
+    pub total_agents: i64,
+    pub total_customers: i64,
+    pub avg_responses_per_ticket: f64,
+}
+
+/// Repository untuk mengambil statistik dashboard
+#[derive(Clone)]
+pub struct DashboardRepository {
+    pool: PgPool,
+}
+
+impl DashboardRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Ambil statistik lengkap untuk dashboard
+    pub async fn get_stats(&self) -> Result<DashboardStats, AppError> {
+        // --- Statistik Tiket ---
+        #[derive(sqlx::FromRow)]
+        struct TicketStatsRow {
+            total_tickets: i64,
+            open_tickets: i64,
+            in_progress_tickets: i64,
+            resolved_tickets: i64,
+            closed_tickets: i64,
+        }
+
+        let ticket_stats = sqlx::query_as::<_, TicketStatsRow>(
+            r#"SELECT
+                COUNT(*) AS total_tickets,
+                COUNT(*) FILTER (WHERE status = 'open') AS open_tickets,
+                COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress_tickets,
+                COUNT(*) FILTER (WHERE status = 'resolved') AS resolved_tickets,
+                COUNT(*) FILTER (WHERE status = 'closed') AS closed_tickets
+            FROM tickets"#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // --- Statistik User ---
+        #[derive(sqlx::FromRow)]
+        struct UserStatsRow {
+            total_users: i64,
+            total_agents: i64,
+            total_customers: i64,
+        }
+
+        let user_stats = sqlx::query_as::<_, UserStatsRow>(
+            r#"SELECT
+                COUNT(*) AS total_users,
+                COUNT(*) FILTER (WHERE role = 'agent') AS total_agents,
+                COUNT(*) FILTER (WHERE role = 'customer') AS total_customers
+            FROM users"#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // --- Rata-rata Responses Per Tiket ---
+        let total_responses: i64 = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM ticket_responses"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let avg_responses_per_ticket = if ticket_stats.total_tickets > 0 {
+            total_responses as f64 / ticket_stats.total_tickets as f64
+        } else {
+            0.0
+        };
+
+        Ok(DashboardStats {
+            total_tickets: ticket_stats.total_tickets,
+            open_tickets: ticket_stats.open_tickets,
+            in_progress_tickets: ticket_stats.in_progress_tickets,
+            resolved_tickets: ticket_stats.resolved_tickets,
+            closed_tickets: ticket_stats.closed_tickets,
+            total_users: user_stats.total_users,
+            total_agents: user_stats.total_agents,
+            total_customers: user_stats.total_customers,
+            avg_responses_per_ticket,
+        })
+    }
+}
+```
+
+### File: `src/repositories/mod.rs` — UPDATE
+
+```rust
+pub mod user_repository;
+pub mod ticket_repository;
+pub mod response_repository;
+pub mod dashboard_repository;
+
+pub use user_repository::UserRepository;
+pub use ticket_repository::TicketRepository;
+pub use response_repository::ResponseRepository;
+pub use dashboard_repository::{DashboardRepository, DashboardStats};
+```
+
+### File: `src/main.rs` — UPDATE AppState (Lines ~18-30)
+
+```rust
+use sqlx::PgPool;
+use db::create_pool;
+use crate::repositories::{
+    UserRepository, TicketRepository, ResponseRepository, DashboardRepository,
+};
+
+// ============================================
+// AppState — berbagi repositories dan pool ke semua handler
+// ============================================
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub user_repo: UserRepository,
+    pub ticket_repo: TicketRepository,
+    pub response_repo: ResponseRepository,
+    pub dashboard_repo: DashboardRepository,
+}
+
+impl AppState {
+    pub fn new(pool: PgPool) -> Self {
+        Self {
+            user_repo: UserRepository::new(pool.clone()),
+            ticket_repo: TicketRepository::new(pool.clone()),
+            response_repo: ResponseRepository::new(pool.clone()),
+            dashboard_repo: DashboardRepository::new(pool.clone()),
+            db: pool,
+        }
+    }
+}
+```
+
+**Verifikasi:**
+```bash
+cargo build
+# Harus 0 errors (warnings OK)
+```
+
+---
+
+## Kesimpulan Bab 26
+
+Bab ini memperkenalkan:
+
+1. **ResponseRepository** — untuk CRUD operations ticket_responses (insert, read, optional queries)
+2. **DashboardRepository** — untuk aggregate queries dengan `COUNT(*) FILTER (WHERE ...)`
+3. **AppState baru** — mengagregasi semua 4 repository dalam satu struct yang Cloneable, siap untuk di-inject ke handlers
+
+**Benefit Patterns:**
+- Separation of Concerns: Response queries di ResponseRepository, aggregates di DashboardRepository
+- Type Safety: Semua operations type-checked dengan sqlx
+- Reusability: Handlers nanti bisa call `state.response_repo.create(...)` atau `state.dashboard_repo.get_stats()`
+
+Bab berikutnya: **Integrasi Repository ke Handler** — menggunakan repositories ini di HTTP endpoint handlers

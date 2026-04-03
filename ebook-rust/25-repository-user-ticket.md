@@ -688,12 +688,61 @@ pub use ticket_repository::TicketRepository;
 ```
 
 **File: `src/repositories/user_repository.rs`** - Struktur lengkap
-- Method: `find_by_id()`, `find_by_email()`, `find_all()`, `create()`, `delete()`
-- Helper functions: `parse_role()`, `format_role()`
+
+```rust
+use sqlx::PgPool;
+use uuid::Uuid;
+use crate::models::{User, UserRole};
+use crate::common::AppError;
+
+#[derive(Clone)]
+pub struct UserRepository {
+    pool: PgPool,
+}
+
+impl UserRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    // Methods dari latihan Bab 25:
+    // - find_by_id(id: Uuid)
+    // - find_by_email(email: &str)
+    // - create(name, email, password, role)
+    // - find_all(page, limit)
+    // - delete(id)
+    // Helper functions: parse_role(&str), format_role(UserRole)
+}
+```
 
 **File: `src/repositories/ticket_repository.rs`** - Struktur lengkap
-- Method: `find_by_id()`, `find_many()`, `create()`, `update()`, `delete()`
-- Helper functions: `parse_category()`, `parse_priority()`, `parse_status()`
+
+```rust
+use sqlx::PgPool;
+use uuid::Uuid;
+use crate::models::{Ticket, TicketStatus, TicketPriority, TicketCategory};
+use crate::dto::{CreateTicketDto, UpdateTicketDto};
+use crate::common::AppError;
+
+#[derive(Clone)]
+pub struct TicketRepository {
+    pool: PgPool,
+}
+
+impl TicketRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    // Methods dari latihan Bab 25:
+    // - find_by_id(id: Uuid)
+    // - find_many(customer_id, agent_id, status, page, limit)
+    // - create(dto: CreateTicketDto, customer_id)
+    // - update(id, dto: UpdateTicketDto)
+    // - delete(id)
+    // Helper functions: parse_category(&str), parse_priority(&str), parse_status(&str)
+}
+```
 
 **Update: `src/main.rs`**
 Tambahkan di paling atas (dengan mod declarations lain):
