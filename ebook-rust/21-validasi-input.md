@@ -303,7 +303,9 @@ Kalau nilai cocok dengan salah satu opsi yang valid, kembalikan `Ok(())`. Kalau 
 
 ## DTO Lengkap dengan Validasi
 
-Sekarang kita bikin DTOs dengan validasi. DTOs akan disimpan di folder `src/dto/` (pisah dari `src/models/` yang berisi models untuk database).
+Sekarang kita bikin DTOs dengan validasi. **DTO (Data Transfer Object)** adalah struct khusus untuk menerima input dari client HTTP — terpisah dari Model yang merepresentasikan data di database. Kenapa dipisah? Karena model harus match schema database, sedangkan DTO bisa punya validation rules, field opsional, atau struktur yang berbeda. Contoh: `password` ada di `RegisterDto` (input), tapi di-skip saat serialize `User` model (output).
+
+DTOs akan disimpan di folder `src/dto/` (pisah dari `src/models/` yang berisi models untuk database).
 
 ### Struktur Folder DTO
 

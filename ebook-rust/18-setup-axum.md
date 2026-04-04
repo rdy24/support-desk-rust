@@ -1,6 +1,6 @@
 # Bab 18: Setup Project Axum
 
-Fase 2 dimulai di sini. Kalau Fase 1 fokus pada dasar-dasar Rust, Fase 2 adalah tentang membangun sesuatu yang nyata: Support Desk API. Bab ini adalah pondasinya.
+Bagian proyek dimulai di sini. Kalau bab-bab sebelumnya fokus pada dasar-dasar Rust, sekarang saatnya membangun sesuatu yang nyata: Support Desk API. Bab ini adalah pondasinya.
 
 [ILUSTRASI: Seorang arsitek sedang meletakkan batu pondasi gedung, dengan blueprint di tangannya. Di latar belakang, gedung masih kosong tapi kerangkanya sudah terlihat.]
 

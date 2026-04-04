@@ -8,7 +8,7 @@ Program komputer perlu tahu: "kalau kondisi ini, lakukan itu. Kalau tidak, lakuk
 
 ## if / else if / else
 
-`if` dipakai untuk membuat program mengambil keputusan. Analoginya: petugas support desk yang lihat tiket masuk, kalau "server mati", langsung eskalasi. Kalau "lupa password", kasih panduan reset. Kalau yang lain, catat dulu.
+`if` dipakai untuk membuat program mengambil keputusan. Analoginya: petugas helpdesk yang lihat tiket masuk, kalau "server mati", langsung eskalasi. Kalau "lupa password", kasih panduan reset. Kalau yang lain, catat dulu.
 
 ```rust
 fn main() {
@@ -223,7 +223,7 @@ Tanpa label, `break` hanya keluar dari loop `priorities`. Dengan `break 'outer`,
 ## Contoh: Check Priority Ticket
 
 ```rust
-fn check_priority(score: u32) -> &'static str {
+fn check_priority(score: u32) -> &str {  // return string literal
     if score >= 9 {
         "Kritis"
     } else if score >= 7 {

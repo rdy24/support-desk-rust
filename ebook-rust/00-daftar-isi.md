@@ -1,19 +1,18 @@
-# Rust dari Nol sampai REST API
-## Belajar Rust dengan Membangun Support Desk API
+# Belajar Rust dari Nol
 
 ---
 
 > **Untuk siapa ebook ini?**
 > Ebook ini ditulis untuk siapa saja yang ingin belajar Rust — tidak perlu pengalaman programming sebelumnya. Kamu yang sudah coding di bahasa lain akan lebih mudah, tapi bukan syarat wajib.
 >
-> **Apa yang akan kamu bangun?**
-> Di akhir ebook ini, kamu akan punya REST API Support Desk lengkap — autentikasi JWT, manajemen tiket, role-based access control, dan database PostgreSQL. Semua ditulis dalam Rust.
+> **Apa yang akan kamu pelajari?**
+> Ebook ini mengajari Rust dari fondasi dasar sampai membangun aplikasi nyata. Kamu akan menguasai konsep ownership, error handling, traits, async programming, dan lebih banyak lagi — dengan contoh praktis di setiap bab.
 
 ---
 
 ## Daftar Isi
 
-### Fase 1: Dasar-Dasar Rust
+### Bagian Fondasi: Dasar-Dasar Rust
 
 | Bab | Judul |
 |-----|-------|
@@ -35,7 +34,7 @@
 | [16](./16-module-system.md) | Module System |
 | [17](./17-async-tokio.md) | Async Rust dan Tokio |
 
-### Fase 2: Membangun Support Desk API
+### Bagian Proyek: Membangun REST API
 
 | Bab | Judul |
 |-----|-------|
@@ -47,17 +46,17 @@
 | [23](./23-postgresql-sqlx-setup.md) | PostgreSQL dan SQLx Setup |
 | [24](./24-migrations-schema.md) | Migrations dan Schema |
 | [25](./25-repository-user-ticket.md) | Repository: User dan Ticket |
+
+### Bagian Lanjutan (Tersedia di Versi Lengkap)
+
+| Bab | Judul |
+|-----|-------|
 | [26](./26-repository-response-dashboard.md) | Repository: Response dan Dashboard |
 | [27](./27-autentikasi-register-login.md) | Autentikasi: Register dan Login |
 | [28](./28-autentikasi-jwt-middleware.md) | Autentikasi: JWT dan Middleware |
 | [29](./29-role-based-access-control.md) | Role-Based Access Control |
 | [30](./30-service-ticket-response.md) | Service Layer: Ticket dan Response |
 | [31](./31-service-user-dashboard.md) | Service Layer: User dan Dashboard |
-
-### Fase 3: Penyempurnaan
-
-| Bab | Judul |
-|-----|-------|
 | [32](./32-menyatukan-routes.md) | Menyatukan Semua Routes |
 | [33](./33-testing-unit.md) | Testing: Unit Test |
 | [34](./34-testing-integrasi.md) | Testing: Integration Test |
@@ -69,9 +68,9 @@
 
 Baca **dari awal ke akhir secara berurutan**. Setiap bab membangun pemahaman dari bab sebelumnya.
 
-Kalau sudah punya pengalaman programming, boleh skip Bab 1-3. Tapi **jangan skip Bab 4-17** — konsep Rust di sana berbeda dari bahasa lain dan jadi fondasi Fase 2.
+Kalau sudah punya pengalaman programming, boleh skip Bab 1-3. Tapi **jangan skip Bab 4-17** — konsep Rust di sana berbeda dari bahasa lain dan sangat fundamental.
 
-Kode di Fase 2 (Bab 18-32) bersifat **kumulatif** — kode Bab 19 menggunakan hasil Bab 18, dan seterusnya.
+Kode di Bagian Proyek (Bab 18-35) bersifat **kumulatif** — kode Bab 19 menggunakan hasil Bab 18, dan seterusnya.
 
 ---
 

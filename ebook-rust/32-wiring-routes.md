@@ -6,7 +6,7 @@ Itulah yang kita lakukan di bab ini.
 
 Handler sudah jadi. Service sudah jadi. Repository sudah jadi. Middleware auth sudah jaga pintu. Sekarang kita sambungkan semuanya ke panel utama, yaitu `main.rs`, lalu nyalakan servernya.
 
-Ini bab klimaks Fase 2. Setelah ini, aplikasi kita benar-benar bisa diakses dari browser atau Postman.
+Ini bab klimaks dari bagian proyek. Setelah ini, aplikasi kita benar-benar bisa diakses dari browser atau Postman.
 
 [ILUSTRASI: Diagram gedung bertingkat dengan label setiap lantai (Repository, Service, Handler, Middleware, main.rs sebagai panel listrik di basement yang menyambungkan segalanya)]
 
@@ -536,7 +536,7 @@ Semuanya siap. Server bisa dijalankan dengan `cargo run` dan diakses melalui Pos
 
 ## Hasil Akhir
 
-Setelah langkah-langkah di atas, file `src/main.rs` adalah versi final dari Fase 2. Berikut checklist final:
+Setelah langkah-langkah di atas, file `src/main.rs` adalah versi final. Berikut checklist final:
 
 ✅ Semua 4 repositories ter-inisialisasi di `AppState::new()`
 ✅ Semua 4 services ter-inisialisasi di `AppState::new()`
@@ -551,4 +551,6 @@ Jalankan `cargo build` untuk memastikan tidak ada error kompilasi. Jika semuanya
 
 ---
 
-Fase 2 selesai. Semua kabel sudah tersambung, semua ruangan sudah terang. Kami punya 18 endpoint yang berfungsi penuh dengan auth, service layer, repository pattern, dan CORS. Di Fase 3, kita akan fokus pada testing, error handling yang lebih baik, dan persiapan deployment.
+Aplikasi sudah lengkap dan bisa di-test manual dengan curl atau Postman. Semua 18 endpoint berfungsi penuh dengan auth, service layer, repository pattern, dan CORS.
+
+Tapi manual testing ada masalahnya: setiap kali kita ubah kode, kita harus ulang test semua endpoint — boring dan rawan lupa. Di bab berikutnya, kita akan buat automated tests yang langsung tahu kalau ada yang rusak.

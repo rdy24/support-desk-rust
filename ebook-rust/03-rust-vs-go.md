@@ -103,7 +103,7 @@ Kalau kita belajar Go, kita akan cepat produktif, tapi kita akan "tidak tahu yan
 
 Rust memaksa kita peduli. Rust memaksa kita mengerti apa itu ownership, kenapa lifetime penting, bagaimana memori benar-benar bekerja, kenapa concurrency bisa berbahaya. Konsep-konsep ini berlaku di **semua bahasa pemrograman**, belajar Rust berarti naik level sebagai programmer secara umum.
 
-Selain itu, ekosistem Rust untuk web backend sedang tumbuh pesat. Framework seperti Axum dan Actix-web, serta library async seperti Tokio sudah production-ready. Perusahaan besar seperti Discord, Cloudflare, dan AWS sudah pakai Rust di infrastruktur kritisnya.
+Selain itu, ekosistem Rust untuk web backend sedang tumbuh pesat. Framework web, library async, dan tools production-grade sudah matang dan dipakai oleh perusahaan besar seperti Discord, Cloudflare, dan AWS di infrastruktur kritisnya.
 
 Belajar Rust sekarang adalah investasi jangka panjang. Lebih susah di awal, tapi reward-nya nyata.
 

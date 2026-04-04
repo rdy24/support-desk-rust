@@ -4,6 +4,8 @@ Bayangkan sebuah kantor pemerintahan dengan dua bagian: **bagian arsip** dan **b
 
 Begitulah **Repository Pattern** bekerja di kode ini. Repository adalah bagian arsip. Service/handler adalah bagian operasional. Keduanya punya tanggung jawab yang jelas dan tidak saling campur urusan.
 
+Keuntungan utama: semua query database terkumpul di satu tempat. Kalau suatu saat perlu ganti cara query atau bahkan ganti database engine, cukup ubah repository — handler dan service tidak perlu tahu.
+
 [ILUSTRASI: Diagram dua kotak, "Handler/Service" (bagian operasional) dan "Repository" (bagian arsip), dengan panah dua arah bertuliskan "minta data" dan "kembalikan data", serta kotak "Database" di sisi Repository]
 
 ---

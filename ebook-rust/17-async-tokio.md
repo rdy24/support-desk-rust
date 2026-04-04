@@ -17,7 +17,7 @@ Pelayan yang smart mencatat pesanan, kasih ke dapur, lalu langsung ke meja lain.
 | Cocok untuk CPU-heavy | Cocok untuk I/O-heavy (database, HTTP) |
 | Program "block" sambil nunggu | Program tetap responsif |
 
-Untuk web API seperti Support Desk, hampir semua operasi itu I/O: baca dari database, kirim HTTP response, tulis log. Kalau semua dikerjain sinkronus, server bakal lemot parah karena nunggu terus.
+Untuk web API, hampir semua operasi itu I/O: baca dari database, kirim HTTP response, tulis log. Kalau semua dikerjain sinkronus, server bakal lemot parah karena nunggu terus.
 
 ---
 
@@ -82,7 +82,7 @@ Fungsi `main()` di Rust bersifat sinkronus. Tidak bisa langsung pakai `async fn 
 #[tokio::main]
 async fn main() {
     // sekarang kamu bisa .await di sini
-    println!("Support Desk API siap!");
+    println!("Async app siap!");
 }
 ```
 
@@ -149,7 +149,7 @@ async fn cek_status_ticket(id: u32) {
 }
 ```
 
-Di konteks Support Desk, ini berguna untuk menunggu response dari email server, polling status eksternal, atau rate limiting ke third-party API.
+Ini berguna untuk menunggu response dari email server, polling status eksternal, atau rate limiting ke third-party API.
 
 [ILUSTRASI: Diagram timeline showing 3 concurrent tasks overlapping vs 3 sequential tasks stacked]
 
@@ -161,7 +161,7 @@ Web API hampir semuanya bekerja dengan nunggu I/O: user kirim request, kita quer
 
 Kalau semua ini sinkronus, server hanya bisa menangani **1 request sekaligus**. Dengan async, server bisa menangani **ribuan request bersamaan** dengan resource yang sama.
 
-Axum, web framework Rust yang akan kita pakai di Fase 2, dibangun di atas Tokio. Pemahaman soal `async`/`.await` dan `tokio::spawn` yang kita pelajari di sini akan langsung terpakai saat membangun Support Desk API nanti.
+Axum, salah satu web framework Rust paling populer, dibangun di atas Tokio. Pemahaman soal `async`/`.await` dan `tokio::spawn` yang kita pelajari di sini adalah fondasi untuk membangun aplikasi backend yang scalable.
 
 [ILUSTRASI: Diagram: User requests masuk ke server → async handler memproses bersamaan → responses keluar]
 
@@ -172,8 +172,8 @@ Axum, web framework Rust yang akan kita pakai di Fase 2, dibangun di atas Tokio.
 Buat project baru dan praktikkan konsep ini:
 
 ```bash
-cargo new support-desk-async
-cd support-desk-async
+cargo new belajar-async
+cd belajar-async
 ```
 
 Tambah Tokio ke `Cargo.toml`, lalu tulis kode berikut di `src/main.rs`:
@@ -181,7 +181,7 @@ Tambah Tokio ke `Cargo.toml`, lalu tulis kode berikut di `src/main.rs`:
 **Tantangan 1: Sequential vs Concurrent**
 Jalankan `proses_ticket` untuk ticket #1, #2, #3 secara sequential. Ukur waktunya dengan `std::time::Instant::now()`. Lalu ubah jadi concurrent dengan `tokio::spawn`. Bandingkan hasilnya.
 
-**Tantangan 2: Simulasi Support Desk**
+**Tantangan 2: Simulasi Ticket Assignment**
 Buat async function `assign_ticket(ticket_id: u32, agent_name: String)` yang:
 1. Print "Assigning ticket #{} to {}"
 2. Sleep 200ms (simulasi update database)

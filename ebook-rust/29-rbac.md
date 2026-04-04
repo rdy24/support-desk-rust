@@ -125,7 +125,9 @@ where
 }
 ```
 
-Pola penting: `let AuthUser(claims) = AuthUser::from_request_parts(...).await?` adalah **destructuring**. Kita langsung ambil `claims` dari dalam struct `AuthUser`. Tanda `?` berarti kalau `AuthUser` gagal (JWT invalid), error langsung di-propagate ke atas.
+Pola penting: `let AuthUser(claims) = AuthUser::from_request_parts(...).await?` adalah **destructuring**. Kita langsung ambil `claims` dari dalam struct `AuthUser`. Tanda `?` berarti kalau `AuthUser` gagal (JWT invalid), error langsung di-propagate ke atas — request ditolak sebelum sampai ke handler.
+
+Ini disebut **extractor composition**: satu extractor memanggil extractor lain secara manual. `AdminOnly` tidak perlu mengulang logika JWT verification — cukup panggil `AuthUser::from_request_parts()` yang sudah handle itu. Kalau nanti ada extractor baru (misalnya `VerifiedUser`), tinggal compose dari `AuthUser` juga.
 
 ---
 

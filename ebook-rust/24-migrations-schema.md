@@ -122,6 +122,8 @@ sqlx migrate add -r add_indexes
 **Mengapa harus satu per satu?** Karena SQLx menggunakan **timestamp yang presisi hingga detik** untuk menentukan urutan migration. Jika semua command dijalankan bersamaan dalam 1 detik yang sama, semua migration akan dapat timestamp yang identik dan urutan tidak terjamin. Ini penting karena:
 - `create_users_table` harus jalan **PERTAMA** (users table harus exist)
 - `create_tickets_table` harus jalan **KEDUA** (butuh reference ke users table)
+
+Kalau urutan terbalik, `create_tickets_table` akan gagal dengan error `relation 'users' does not exist` karena tabel `tickets` punya FOREIGN KEY ke `users` yang belum dibuat.
 - `create_ticket_responses_table` harus jalan **KETIGA** (butuh reference ke tickets table)
 
 **Flag `-r` (reversible) sangat penting!** Tanpa `-r`, `sqlx migrate add` hanya membuat 1 file `.sql` biasa, bukan `.up.sql` dan `.down.sql`.

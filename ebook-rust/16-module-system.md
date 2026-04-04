@@ -10,7 +10,7 @@ Bayangin meja kerja penuh dokumen berserakan dalam satu tumpukan: kontrak klien,
 
 Dengan **laci-laci berlabel**: satu untuk kontrak, satu untuk invoice, satu untuk catatan meeting, semuanya langsung ketemu. Itulah fungsi **modul** di Rust.
 
-Tanpa modul, semua struct, fungsi, dan logika bakal tumpuk di satu file. Proyek Support Desk punya user, tiket, autentikasi, database. Kalau semua di `main.rs`, file itu bakal jadi 2000 baris yang menyeramkan.
+Tanpa modul, semua struct, fungsi, dan logika bakal tumpuk di satu file. Proyek yang punya user, tiket, autentikasi, database — kalau semua di `main.rs`, file itu bakal jadi 2000 baris yang menyeramkan.
 
 [ILUSTRASI: Gambar dua meja kerja — kiri berantakan semua kertas campur, kanan rapi dengan laci berlabel "Models", "Handlers", "Services", "DB"]
 
@@ -110,7 +110,7 @@ Ketika `mod models;` ditulis di `main.rs`, Rust akan mencari salah satu dari dua
 1. `src/models.rs`: satu file tunggal
 2. `src/models/mod.rs`: folder dengan file `mod.rs` di dalamnya
 
-Untuk proyek kecil, opsi pertama cukup. Untuk proyek yang lebih besar seperti Support Desk API, opsi kedua lebih sesuai karena `models` punya beberapa bagian: `user`, `ticket`, dan seterusnya.
+Untuk proyek kecil, opsi pertama cukup. Untuk proyek yang lebih besar, opsi kedua lebih sesuai karena `models` bisa punya beberapa bagian: `user`, `ticket`, dan seterusnya.
 
 Di dalam `src/models/mod.rs`, sub-modul dideklarasikan:
 
@@ -124,32 +124,25 @@ Struktur file mencerminkan struktur modul. Folder di filesystem menjadi hirarki 
 
 ---
 
-## Struktur Project Support Desk API
+## Contoh Struktur Project Nyata
 
-Inilah struktur folder yang akan dibangun untuk Support Desk API:
+Inilah contoh bagaimana project yang mulai membesar biasanya diorganisir:
 
 ```
 src/
 ├── main.rs
+├── lib.rs
 ├── models/
 │   ├── mod.rs
 │   ├── user.rs
 │   └── ticket.rs
-├── handlers/
-│   ├── mod.rs
-│   ├── auth.rs
-│   └── ticket.rs
-├── services/
-│   ├── mod.rs
-│   └── ticket.rs
-└── db/
-    ├── mod.rs
-    └── repository.rs
+└── utils/
+    └── mod.rs
 ```
 
-[ILUSTRASI: Diagram pohon folder di atas dengan panah menunjukkan: "models = laci data", "handlers = laci request HTTP", "services = laci logika bisnis", "db = laci akses database"]
+[ILUSTRASI: Diagram pohon folder dengan labels: "models = type definitions", "utils = helper functions"]
 
-Setiap modul punya tanggung jawab yang jelas. **models** mendefinisikan struct data (User, Ticket). **handlers** menerima request HTTP dan mengirim response. **services** menampung logika bisnis seperti validasi dan aturan bisnis. **db** mengurus query ke database.
+Setiap folder mewakili area concern yang berbeda. **models** mendefinisikan struct dan tipe data, dipecah per file (`user.rs`, `ticket.rs`). **utils** berisi helper functions yang dipakai di banyak tempat. Dengan pembagian ini, kode menjadi mudah dinavigasi dan dipelihara saat project berkembang.
 
 Contoh lengkap bagaimana ini terhubung:
 
@@ -199,7 +192,7 @@ Di Rust, ada dua titik masuk yang berbeda fungsinya.
 
 **`lib.rs`** adalah titik masuk untuk library, yaitu kode yang bisa dipakai proyek lain. Tidak punya `main()`. Digunakan ketika kamu mau share kode atau ketika proyek merupakan gabungan binary dan library.
 
-Untuk Support Desk API, struktur yang umum dipakai:
+Untuk proyek yang lebih besar, struktur yang umum dipakai:
 
 ```
 src/
@@ -211,7 +204,7 @@ Dengan cara ini, `main.rs` tetap minimalis:
 
 ```rust
 // src/main.rs
-use support_desk::start_server; // import dari lib.rs
+use my_project::start_server; // import dari lib.rs
 
 #[tokio::main]
 async fn main() {
@@ -294,4 +287,4 @@ Kalau berhasil compile dan run tanpa error, dasar module system Rust sudah dikua
 
 ---
 
-Di bab berikutnya, modul-modul ini akan mulai diisi dengan implementasi nyata, dimulai dari model data untuk tiket support.
+Di bab berikutnya, kita belajar **async programming dengan Tokio** — cara Rust menjalankan banyak operasi secara bersamaan tanpa memblokir program.

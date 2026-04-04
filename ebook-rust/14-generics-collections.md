@@ -177,7 +177,7 @@ let count = status_count.entry("open".to_string()).or_insert(0);
 
 ## Gabungan: Filter dan Hitung Ticket
 
-Gabungan semua yang sudah dipelajari dalam satu program Support Desk:
+Gabungan semua yang sudah dipelajari dalam satu program:
 
 ```rust
 use std::collections::HashMap;

@@ -56,7 +56,7 @@ Contoh nyata: fungsi `greet_user` cukup terima `&str` karena hanya butuh baca na
 
 ```rust
 fn greet_user(name: &str) -> String {
-    format!("Halo, {}! Selamat datang di Support Desk.", name)
+    format!("Halo, {}! Selamat datang.", name)
 }
 ```
 
@@ -151,7 +151,7 @@ println!("{}", email.trim());         // "Budi@Example.COM"
 
 ```rust
 fn greet_user(name: &str) -> String {
-    format!("Halo, {}! Selamat datang di Support Desk.", name)
+    format!("Halo, {}! Selamat datang.", name)
 }
 
 fn main() {
@@ -175,7 +175,7 @@ fn main() {
 
 Output-nya:
 ```
-Halo, budi! Selamat datang di Support Desk.
+Halo, budi! Selamat datang.
 Email: budi@example.com
 Panjang username: 4
 Mengandung '@': true
@@ -192,4 +192,4 @@ Fungsi `greet_user` menerima `&str` (pinjam saja) tapi mengembalikan `String` ka
 
 2. **Validasi email sederhana**: buat variabel `email` bertipe `String`, lalu cek apakah mengandung `'@'` dan panjangnya lebih dari 5 karakter. Cetak `"Email valid"` atau `"Email tidak valid"`.
 
-3. **Konversi bolak-balik**: buat `&str` dari string literal `"support@desk.com"`, konversi ke `String` dengan `.to_string()`, lalu konversi kembali ke `&str` dengan `&`. Cetak keduanya.
+3. **Konversi bolak-balik**: buat `&str` dari string literal `"budi@example.com"`, konversi ke `String` dengan `.to_string()`, lalu konversi kembali ke `&str` dengan `&`. Cetak keduanya.

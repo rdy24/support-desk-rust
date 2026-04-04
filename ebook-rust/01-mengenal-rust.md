@@ -68,7 +68,7 @@ Rust tidak diciptakan untuk menggantikan semua bahasa. Dia paling cocok di situa
 
 **Systems Programming**: kernel OS, driver hardware, firmware. Di sinilah Rust paling bersinar karena kontrol penuh atas memori tanpa mengorbankan keamanan.
 
-**Web Backend & API**: dengan framework seperti Axum dan Actix-web, Rust bisa bangun REST API yang sangat cepat. Ini yang akan kita lakukan di ebook ini, membangun Support Desk API.
+**Web Backend & API**: dengan framework seperti Axum dan Actix-web, Rust bisa bangun REST API yang sangat cepat dan aman. Ekosistem Rust untuk web backend sedang berkembang pesat.
 
 **CLI Tools**: alat command line yang dijalankan lewat terminal. Rust menghasilkan binary tunggal yang bisa langsung dijalankan tanpa perlu install runtime seperti Node.js atau Python.
 
@@ -99,18 +99,17 @@ Tapi investasi itu ada hasilnya. Setelah paham Rust, kamu punya pemahaman lebih 
 
 ---
 
-## Preview: Apa yang Akan Kita Bangun?
+## Roadmap Belajarmu
 
-Di ebook ini, kita akan bangun **Support Desk API**: sistem backend untuk aplikasi helpdesk sederhana. Bayangkan aplikasi seperti Zendesk atau Freshdesk, tapi dibuat sendiri dari nol pakai Rust.
+Di ebook ini, kita fokus membangun **fondasi Rust yang kuat** — mulai dari syntax dasar sampai async programming. Kamu akan menguasai:
 
-Sistem ini punya tiga entitas utama: **User** (pengguna sistem dengan role berbeda), **Ticket** (laporan masalah yang dibuat user), dan **Role** (level akses: `admin`, `agent`, atau `customer`). Seorang `customer` bisa buat ticket dan lihat tiketnya sendiri. Seorang `agent` bisa lihat semua ticket dan kasih respon. Seorang `admin` punya akses penuh ke semua fitur.
+- Variabel, tipe data, dan control flow
+- Ownership, borrowing, dan lifetime — konsep unik Rust
+- Error handling yang robust
+- Traits dan generics untuk kode yang fleksibel
+- Async/await dan Tokio untuk concurrency
 
-Semua ini akan dibangun dengan:
-- **Axum**: web framework Rust yang cepat dan modern
-- **SQLx**: library untuk koneksi ke database PostgreSQL
-- **JWT**: JSON Web Token untuk autentikasi
-
-Di akhir Fase 1 (Bab 1-17), kamu akan paham fondasi Rust. Di Fase 2 (Bab 18-31), semua itu dirangkai jadi API yang beneran jalan.
+Setelah fondasi kuat, kamu akan siap membangun aplikasi nyata dengan Rust.
 
 ---
 

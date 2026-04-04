@@ -12,7 +12,7 @@ Itulah inti dari **enum** di Rust. Kita mendefinisikan sendiri daftar pilihan ya
 
 [ILUSTRASI: Dropdown menu "Pilih Role" di form dengan tiga opsi: Admin, Agent, Customer — tidak bisa diisi teks bebas]
 
-Di aplikasi Support Desk kita, setiap pengguna punya role yang hanya tiga kemungkinan: Admin, Agent, atau Customer.
+Contoh: setiap pengguna di sebuah aplikasi punya role yang hanya tiga kemungkinan: Admin, Agent, atau Customer.
 
 ```rust
 #[derive(Debug)]
@@ -141,7 +141,7 @@ enum Option<T> {
 
 `T` adalah placeholder tipe yang bisa diganti tipe apa saja. `Some(T)` artinya "ada nilainya", `None` artinya "tidak ada nilai".
 
-Contoh di Support Desk:
+Contoh:
 
 ```rust
 let assigned_agent: Option<u32> = Some(5);

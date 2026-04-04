@@ -171,7 +171,7 @@ fn make_string() -> String {
 
 Bagaimana Rust tahu seberapa lama sebuah reference "boleh hidup"? Jawabannya adalah konsep yang disebut **lifetime**, cara Rust melacak "umur" dari setiap reference dan memastikan reference tidak hidup lebih lama dari nilai yang ia tunjuk.
 
-Kabar baiknya: untuk banyak kasus, Rust bisa menebak lifetime secara otomatis (*lifetime elision*). Kamu tidak harus selalu menuliskannya. Lifetime akan dibahas lebih dalam di bab tersendiri. Untuk sekarang, cukup tahu bahwa borrow checker menggunakan lifetime di balik layar saat memvalidasi kode kita.
+Kabar baiknya: untuk banyak kasus, Rust bisa menebak lifetime secara otomatis (*lifetime elision*). Kamu tidak harus selalu menuliskannya. Lifetime akan muncul lagi di bab-bab selanjutnya saat kita butuhkan. Untuk sekarang, cukup tahu bahwa borrow checker menggunakan lifetime di balik layar saat memvalidasi kode kita.
 
 ---
 

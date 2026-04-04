@@ -22,7 +22,7 @@ Contoh paling sederhana:
 
 ```rust
 fn greet_user(name: &str) -> String {
-    format!("Halo, {}! Selamat datang di Support Desk.", name)
+    format!("Halo, {}! Selamat datang.", name)
 }
 ```
 
@@ -160,7 +160,7 @@ Tapi biasanya kita tidak perlu repot, cukup skip bagian `->` dan Rust paham send
 Bagaimana kalau kita ingin kembalikan lebih dari satu nilai sekaligus? Jawabannya adalah **tuple**, paket nilai yang dibungkus dalam tanda kurung.
 
 ```rust
-fn categorize_priority(score: u8) -> (&'static str, bool) {
+fn categorize_priority(score: u8) -> (&str, bool) {
     if score >= 8 {
         ("Kritis", true)
     } else if score >= 5 {
@@ -171,7 +171,7 @@ fn categorize_priority(score: u8) -> (&'static str, bool) {
 }
 ```
 
-Return type-nya `(&'static str, bool)`, tuple berisi dua nilai: label prioritas dan status urgent. `&'static str` artinya string yang "hidup seumur program", cocok untuk string literal yang kita tulis langsung di kode. Lifetime dibahas lebih dalam di bab-bab selanjutnya.
+Return type-nya `(&str, bool)`, tuple berisi dua nilai: label prioritas dan status urgent. `&str` adalah tipe string pinjaman yang sudah kita kenal dari Bab 05 — cocok untuk string literal yang kita tulis langsung di kode.
 
 Untuk menggunakan hasilnya, kita bisa *destructure* tuple:
 
@@ -190,7 +190,7 @@ fn format_ticket(id: u32, title: &str, priority: u8) -> String {
     format!("[#{}] {} (prioritas: {})", id, title, priority)
 }
 
-fn categorize_priority(score: u8) -> (&'static str, bool) {
+fn categorize_priority(score: u8) -> (&str, bool) {
     if score >= 8 {
         ("Kritis", true)
     } else if score >= 5 {

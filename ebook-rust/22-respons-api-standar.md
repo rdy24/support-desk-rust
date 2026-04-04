@@ -303,7 +303,7 @@ Konsisten, predictable, mudah di-handle di frontend.
 
 Tiap handler Axum harus return sesuatu yang implement `IntoResponse`. Axum sudah bawaan support beberapa tipe: `String`, `StatusCode`, tuple `(StatusCode, Json<T>)`, dan lainnya.
 
-Supaya `ApiResponse<T>` bisa langsung di-return dari handler tanpa wrap manual, caranya sederhana: **implement `IntoResponse` untuk `ApiResponse<T>`**.
+Supaya `ApiResponse<T>` bisa langsung di-return dari handler tanpa wrap manual, caranya sederhana: **implement `IntoResponse` untuk `ApiResponse<T>`**. Tanpa ini, compiler akan menolak handler kamu dengan error karena Axum tidak tahu cara mengubah `ApiResponse<T>` jadi HTTP response.
 
 Analogi: Kalau mau kirim paket ke luar negeri, paket harus di-pack dengan format standar (bungkus dengan plastik, label, dll). Begitu juga response harus di-"pack" jadi format HTTP response yang Axum mengerti. `IntoResponse` adalah packer-nya.
 
@@ -795,4 +795,4 @@ cargo test test_pagination
 cargo run
 ```
 
-Di bab berikutnya, kita akan mulai setup database dan mengintegrasikan semua response handling ini dengan akses database sesungguhnya.
+Di bab berikutnya, kita akan setup database PostgreSQL menggunakan Docker dan SQLx. Kalau kamu belum pernah pakai Docker, jangan khawatir — kita akan setup dari nol, step-by-step. Pastikan Docker sudah ter-install di komputermu sebelum lanjut.

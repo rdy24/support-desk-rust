@@ -59,9 +59,12 @@ Pertama, tambahkan struct untuk data yang akan disimpan di dalam JWT di `src/ser
 use serde::{Deserialize, Serialize};
 
 /// JWT Claims - data yang disimpan dalam token
+/// `sub` (subject) = convention JWT untuk user ID
+/// `exp` (expiry) = unix timestamp kapan token expired
+/// `email` dan `role` = custom claims sesuai kebutuhan app
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,      // user id sebagai string
+    pub sub: String,      // user id sebagai string (JWT convention)
     pub email: String,
     pub role: String,     // "admin", "agent", atau "customer"
     pub exp: usize,       // expiry timestamp (unix seconds)

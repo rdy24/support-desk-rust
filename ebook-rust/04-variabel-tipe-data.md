@@ -1,6 +1,6 @@
 # Bab 04: Variabel dan Tipe Data
 
-Bayangin meja admin support desk dengan deretan kotak berlabel: "Nama Pelanggan", "Status Tiket", "Prioritas". Tiap kotak menyimpan satu informasi spesifik. Itulah konsep **variabel**: kotak penyimpanan berlabel untuk data. Di Rust, cara mengelola kotak-kotak ini punya aturan yang unik.
+Bayangin meja admin dengan deretan kotak berlabel: "Nama Pelanggan", "Status Tiket", "Prioritas". Tiap kotak menyimpan satu informasi spesifik. Itulah konsep **variabel**: kotak penyimpanan berlabel untuk data. Di Rust, cara mengelola kotak-kotak ini punya aturan yang unik.
 
 [ILUSTRASI: Meja admin dengan deretan kotak berlabel berbeda — "ticket_id", "status", "prioritas". Beberapa kotak terkunci dengan gembok, beberapa tidak.]
 
@@ -110,7 +110,7 @@ let is_open: bool = true;
 let is_resolved: bool = false;
 ```
 
-Di Support Desk, boolean cocok untuk status tiket, flag prioritas tinggi, atau apakah user sudah verifikasi email.
+Boolean cocok untuk status tiket, flag prioritas tinggi, atau apakah user sudah verifikasi email.
 
 ### Character
 
@@ -153,14 +153,14 @@ Konstanta adalah nilai yang **benar-benar tidak pernah berubah sepanjang program
 
 ```rust
 const MAX_TICKETS: u32 = 1000;
-const APP_NAME: &str = "Support Desk";  // &str = tipe string pinjaman (dibahas di Bab 05)
+const APP_NAME: &str = "Ticket App";  // &str = tipe string pinjaman (dibahas di Bab 05)
 ```
 
 Konstanta cocok untuk nilai konfigurasi yang tidak boleh berubah: batas maksimal tiket, nama aplikasi, dan sejenisnya.
 
 ---
 
-## Contoh: Data Ticket Support Desk
+## Contoh: Data Ticket
 
 ```rust
 fn main() {
@@ -192,7 +192,7 @@ Batas maksimal ticket: 1000
 ## Latihan
 
 **Tugas 1: Data User**
-Deklarasikan variabel-variabel berikut untuk menyimpan data seorang user support desk: `username` bertipe teks, `email` bertipe teks, `role` bertipe teks (contoh: `"admin"` atau `"agent"`), `is_active` bertipe `bool`, dan `total_tickets_handled` bertipe `u32`. Cetak semua data tersebut ke layar dengan `println!`.
+Deklarasikan variabel-variabel berikut untuk menyimpan data seorang user: `username` bertipe teks, `email` bertipe teks, `role` bertipe teks (contoh: `"admin"` atau `"agent"`), `is_active` bertipe `bool`, dan `total_tickets_handled` bertipe `u32`. Cetak semua data tersebut ke layar dengan `println!`.
 
 **Tugas 2: Hitung Total Tiket**
 Mulai dengan variabel `open_tickets: u32 = 15` dan `closed_tickets: u32 = 42`. Gunakan shadowing untuk membuat variabel `total` yang menyimpan jumlah keduanya, lalu cetak hasilnya. Bonus: ubah `open_tickets` menjadi mutable dan tambahkan 5 tiket baru ke dalamnya sebelum dijumlahkan.

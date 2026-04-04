@@ -295,11 +295,11 @@ Ticket { id: 1, title: "Login tidak bisa", status: "closed", priority: 9, create
 
 ## Latihan
 
-1. **Tambah field `assignee_id: Option<u32>`** ke struct `Ticket` untuk menyimpan ID user yang menangani tiket (boleh kosong/`None` kalau belum di-assign). Update `Ticket::new` agar `assignee_id` mulai dengan `None`.
+1. **Tambah field `assignee_id: u32`** ke struct `Ticket` untuk menyimpan ID user yang menangani tiket (pakai `0` kalau belum di-assign). Update `Ticket::new` agar `assignee_id` mulai dengan `0`. (Di Bab 11 kita akan belajar `Option<T>` sebagai cara yang lebih elegan untuk merepresentasikan "belum ada nilai".)
 
 2. **Buat method `assign(&mut self, user_id: u32)`** yang mengisi `assignee_id` dengan user ID yang diberikan.
 
-3. **Buat method `is_assigned(&self) -> bool`** yang mengembalikan `true` kalau tiket sudah punya assignee.
+3. **Buat method `is_assigned(&self) -> bool`** yang mengembalikan `true` kalau `assignee_id` bukan `0`.
 
 4. **Buat struct `User`** dengan field `id`, `name`, `email`, dan `role`. Buat associated function `User::new(...)` sebagai constructor-nya.
 

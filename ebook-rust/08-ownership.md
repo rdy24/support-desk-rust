@@ -156,7 +156,7 @@ Urutan drop mengikuti urutan kebalikan deklarasi, variabel yang dideklarasi tera
 
 Dengan ownership, Rust bisa memberikan jaminan keamanan memori **tanpa GC** dan **tanpa overhead runtime**. Semua pengecekan terjadi saat kompilasi. Kalau kode kamu berhasil dikompilasi, Rust sudah menjamin tidak ada memory leak, tidak ada use-after-free, tidak ada data race.
 
-Untuk aplikasi seperti support desk kita, ini artinya kita bisa yakin bahwa data user dan ticket dikelola dengan benar, tanpa perlu khawatir tentang kebocoran memori saat traffic tinggi.
+Untuk aplikasi web, ini artinya kita bisa yakin bahwa data user dan ticket dikelola dengan benar, tanpa perlu khawatir tentang kebocoran memori saat traffic tinggi.
 
 [ILUSTRASI: Diagram perbandingan — GC pause vs ownership compile-time check]
 

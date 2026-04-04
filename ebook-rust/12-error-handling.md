@@ -2,6 +2,8 @@
 
 Semua program pasti bisa gagal. File tidak ditemukan, koneksi database putus, input user aneh: itu hal biasa. Yang membedakan program bagus dan program buruk bukan "apakah error terjadi", tapi "bagaimana program merespons error itu".
 
+Ingat `Option<T>` dari Bab 11? `Option` merepresentasikan "ada atau tidak ada". Nah, `Result<T, E>` konsepnya mirip: dia juga enum dengan dua variant, tapi khusus untuk operasi yang bisa **berhasil atau gagal**.
+
 ---
 
 ## Analogi: Kasir yang Jujur vs Kasir yang Diam dan Meledak

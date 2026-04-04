@@ -1,4 +1,4 @@
-# Learn Rust by Building a REST API
+# Belajar Rust dari Nol
 
 ## Section 1: Mengenal Rust (5 bab)
 | Bab | Judul |
@@ -38,29 +38,35 @@
 | 21 | Validasi Input |
 | 22 | Respons API Standar |
 
-## Section 5: Database & Repository (4 bab)
+## Section 5: Database & Repository (3 bab)
 | Bab | Judul |
 |-----|-------|
 | 23 | PostgreSQL dan SQLx Setup |
 | 24 | Migrations dan Schema |
 | 25 | Repository: User dan Ticket |
-| 26 | Repository: Response dan Dashboard |
 
-## Section 6: Autentikasi & Otorisasi (3 bab)
+---
+
+## 🔒 Bagian Lanjutan (Tersedia di Versi Lengkap)
+
+Bab 26-35 mencakup implementasi lengkap REST API: autentikasi, otorisasi, service layer, testing, dan deployment. Akses penuh tersedia di versi premium ebook.
+
+### Section 6: Autentikasi & Otorisasi (4 bab)
 | Bab | Judul |
 |-----|-------|
+| 26 | Repository: Response dan Dashboard |
 | 27 | Autentikasi: Register dan Login |
 | 28 | Autentikasi: JWT dan Middleware |
 | 29 | Role-Based Access Control |
 
-## Section 7: Logika Bisnis & Wiring API (3 bab)
+### Section 7: Logika Bisnis & Wiring API (3 bab)
 | Bab | Judul |
 |-----|-------|
 | 30 | Service Layer: Ticket dan Response |
 | 31 | Service Layer: User dan Dashboard |
 | 32 | Menyatukan Semua Routes |
 
-## Section 8: Testing & Penutup (3 bab)
+### Section 8: Testing & Penutup (3 bab)
 | Bab | Judul |
 |-----|-------|
 | 33 | Testing: Unit Test |
@@ -69,4 +75,4 @@
 
 ---
 
-**Total: 8 section, 35 bab**
+**Total: 8 section, 35 bab | FREE: Bab 1-25 | PREMIUM: Bab 26-35**

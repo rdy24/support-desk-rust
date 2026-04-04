@@ -1,6 +1,6 @@
 # Bab 13: Traits
 
-Bayangkan kamu rekrut staf baru untuk support desk. Kamu nggak peduli orangnya lulusan mana, pengalaman berapa tahun, atau dari kota mana. Yang penting satu: **dia bisa bikin laporan harian**. Selama bisa bikin laporan, dia lolos seleksi.
+Bayangkan kamu rekrut staf baru untuk tim. Kamu nggak peduli orangnya lulusan mana, pengalaman berapa tahun, atau dari kota mana. Yang penting satu: **dia bisa bikin laporan harian**. Selama bisa bikin laporan, dia lolos seleksi.
 
 Itulah trait di Rust. Bukan soal "siapa kamu" (class / warisan), tapi soal **"apa yang bisa kamu lakukan"**. Trait adalah kontrak kemampuan.
 
@@ -224,8 +224,11 @@ fn buat_item(is_ticket: bool) -> impl Summarize {
             status: String::from("open"),
         }
     } else {
-        // Note: ini tidak compile karena return type harus satu tipe konkret
-        // Untuk return berbeda tipe, perlu Box<dyn Summarize> — dibahas di Bab berikutnya
+        // ⚠️ Kalau di sini kita return tipe lain (misal User),
+        // kode ini TIDAK akan compile karena `impl Trait`
+        // hanya boleh return satu tipe konkret.
+        // Solusinya: Box<dyn Summarize> — dibahas nanti.
+        panic!("Hanya untuk contoh")
     }
 }
 ```

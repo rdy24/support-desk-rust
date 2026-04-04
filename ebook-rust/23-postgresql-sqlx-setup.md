@@ -353,7 +353,7 @@ pub async fn create_pool(database_url: &str) -> PgPool {
 }
 ```
 
-`max_connections(10)` menetapkan maksimal 10 koneksi simultan, sesuaikan dengan kebutuhan dan kapasitas server database. `connect(database_url)` adalah operasi async, jadi perlu `.await`.
+`max_connections(10)` menetapkan maksimal 10 koneksi simultan, sesuaikan dengan kebutuhan dan kapasitas server database. `connect(database_url)` adalah operasi async, jadi perlu `.await`. Tanpa `.await`, yang kamu dapat bukan pool yang siap pakai, tapi sebuah Future yang belum dijalankan — dan compiler akan menolak dengan error tipe.
 
 ---
 

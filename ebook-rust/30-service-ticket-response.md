@@ -21,6 +21,8 @@ Handler tidak perlu tahu soal aturan bisnis. Repository tidak perlu tahu siapa y
 
 Semua aturan itu **tidak boleh** ditaruh di handler (handler cuma routing) dan **tidak boleh** ditaruh di repository (repository cuma query database). Tempatnya di service.
 
+Kenapa dipisah? Bayangkan suatu saat aturan berubah — admin juga boleh buat ticket, bukan cuma customer. Kalau logic ada di handler, kamu harus cari dan ubah handler. Kalau ada di service, cukup ubah satu method `create()`. Setiap perubahan bisnis dikerjakan di satu tempat.
+
 ---
 
 ## Kunci Jawaban & State Sebelumnya
@@ -383,6 +385,8 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(pool: PgPool, jwt_secret: String) -> Self {
+        // pool.clone() aman dan murah — PgPool pakai Arc di dalamnya,
+        // jadi clone hanya menambah reference counter, bukan copy semua koneksi
         let user_repo = UserRepository::new(pool.clone());
         let ticket_repo = TicketRepository::new(pool.clone());
         let response_repo = ResponseRepository::new(pool.clone());
